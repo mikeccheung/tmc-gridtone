@@ -37,12 +37,43 @@
         .page { max-width: 720px; }
       }
 
+      /* Responsive toolbar:
+        - On small screens: groups stack in rows, full-width
+        - On wider screens: groups align in a single row
+      */
       .toolbar {
-        display:flex; gap:.75rem; align-items:center;
-        padding: .75rem; position: sticky; top: 0;
-        background: rgba(15,15,16,.8); backdrop-filter: blur(10px);
-        z-index: 10; border-bottom: 1px solid #222;
+        position: sticky; top: 0; z-index: 10;
+        display: flex; flex-wrap: wrap; align-items: center;
+        gap: .5rem .75rem;
+        padding: .5rem .75rem;
+        background: rgba(15,15,16,.8);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid #222;
       }
+      .toolbar-group {
+        display: flex; align-items: center; gap: .5rem;
+        flex: 1 1 100%;
+      }
+      .toolbar-group--end { justify-content: flex-start; }
+
+      /* On mid-to-large screens, let groups size to content and sit on one row */
+      @media (min-width: 720px) {
+        .toolbar-group { flex: 0 0 auto; }
+        .toolbar-group--end { margin-left: auto; }
+      }
+
+      /* Controls */
+      .btn { background:#1d1d20; border:1px solid #2a2a2e; padding:.5rem .7rem; border-radius:10px; color:#fff; cursor:pointer; }
+      .btn:disabled { opacity:.5; cursor:default; }
+      input[type="file"] { display:none; }
+      label.btn { display:inline-flex; align-items:center; gap:.4rem; }
+      .toggle { display:flex; align-items:center; gap:.5rem; }
+      .select { background:#1d1d20; border:1px solid #2a2a2e; color:#fff; padding:.45rem .6rem; border-radius:10px; }
+
+      /* Compact opacity slider block */
+      .opacity-control { display:flex; align-items:center; gap:.5rem; }
+      .opacity-control label { font-size:12px; opacity:.8; }
+      .opacity-control input[type="range"] { width: 100px; }
 
       /* Fixed 3-across image grid */
       .grid {
@@ -57,7 +88,7 @@
       }
       .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-      /* Swatch “dot” row (Dot mode) */
+      /* Swatch bar for Dot mode */
       .swatchBar {
         position: absolute; left: 6px; bottom: 6px;
         display: inline-flex; gap: 8px; align-items: center;
@@ -101,13 +132,6 @@
         border-radius:999px; background:rgba(0,0,0,.35);
       }
 
-      .btn { background:#1d1d20; border:1px solid #2a2a2e; padding:.5rem .7rem; border-radius:10px; color:#fff; cursor:pointer; }
-      .btn:disabled { opacity:.5; cursor:default; }
-      input[type="file"] { display:none; }
-      label.btn { display:inline-flex; align-items:center; gap: .4rem; }
-      .toggle { display:flex; align-items:center; gap:.5rem; }
-      .select { background:#1d1d20; border:1px solid #2a2a2e; color:#fff; padding:.45rem .6rem; border-radius:10px; }
-
       .tile .delete {
         position:absolute; top:6px; right:6px;
         width:26px; height:26px; border-radius:999px;
@@ -117,6 +141,7 @@
       }
       .tile .delete:hover { background:rgba(0,0,0,.65); }
     </style>
+
   </head>
   <body>
     <div id="root"></div>

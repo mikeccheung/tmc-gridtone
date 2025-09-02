@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors
 } from '@dnd-kit/core'
@@ -9,61 +9,99 @@ import { CSS } from '@dnd-kit/utilities'
 import { averageColorFromBitmap, dominantColorsFromBitmap, rgbToHex } from './colorUtils'
 import { exportGrid } from './exportUtils'
 
+/**
+ * Local storage key for persisted grid state.
+ */
 const STORAGE_KEY = 'gridtone:v1'
+
+/**
+ * Portable delete handler for tiles.
+ */
 const RemoveContext = React.createContext(()=>{})
 
+/**
+ * Persist only minimal item data to localStorage.
+ */
 function saveState(items){
   const lite = items.map(({id, img, avg, dom}) => ({ id, imgSrc: img?.src ?? '', avg, dom }))
   localStorage.setItem(STORAGE_KEY, JSON.stringify(lite))
 }
+
+/**
+ * Load persisted items from localStorage and rebuild <img> elements.
+ */
 function loadState(){
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const lite = JSON.parse(raw)
     return lite.map((t) => {
-      const img = new Image(); img.src = t.imgSrc || ''
+      const img = new Image()
+      img.src = t.imgSrc || ''
       return { id: t.id, img, avg: t.avg, dom: t.dom }
     })
-  } catch { return [] }
+  } catch {
+    return []
+  }
 }
 
+/**
+ * Overlay mode constants.
+ */
 const OVERLAY_MODES = { DOT:'dot', HALF:'half', FULL:'full' }
+
+/**
+ * Overlay opacity presets (20%, 50%, 80%).
+ */
 const OVERLAY_ALPHAS = [0.2, 0.5, 0.8]
 
 export default function App(){
   const [items, setItems] = useState(()=>loadState())
   const [showColor, setShowColor] = useState(true)
-  const [mode, setMode] = useState('average')
+  const [mode, setMode] = useState('average')             // 'average' | 'dominant'
   const [overlayMode, setOverlayMode] = useState(OVERLAY_MODES.DOT)
-  const [overlayAlphaIdx, setOverlayAlphaIdx] = useState(1)
-  const [showSidebar, setShowSidebar] = useState(false)
+  const [overlayAlphaIdx, setOverlayAlphaIdx] = useState(1) // default to 50%
+  const [showSidebar, setShowSidebar] = useState(false)     // hide palette by default on narrow viewports
   const inputRef = useRef(null)
 
+  // Persist state on change.
   React.useEffect(()=>{ saveState(items) }, [items])
 
+  // Pointer sensor with small drag threshold.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
+  /**
+   * Import image files, compute average and dominant colors,
+   * and append to the grid.
+   */
   const onFiles = async (files) => {
     const arr = []
     for (const file of files){
       if (!file.type.startsWith('image/')) continue
+
       const dataURL = await fileToDataURL(file)
       const img = await dataURLToImage(dataURL)
+
       const blob = await (await fetch(dataURL)).blob()
       const bmp = await createImageBitmap(blob)
+
       const avg = averageColorFromBitmap(bmp)
       const dom = dominantColorsFromBitmap(bmp, 3)
+
       arr.push({ id: crypto.randomUUID(), img, avg, dom })
     }
     setItems(prev=>prev.concat(arr))
   }
+
   const onDropInput = (e)=>{ e.preventDefault(); onFiles(e.dataTransfer.files) }
   const onInputChange = (e)=> onFiles(e.target.files)
 
   const ids = items.map(i=>i.id)
-  const columns = 3
+  const columns = 3 // fixed 3-across layout
 
+  /**
+   * Handle drag-and-drop reordering.
+   */
   const handleDragEnd = (event) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -72,6 +110,9 @@ export default function App(){
     setItems(arrayMove(items, oldIndex, newIndex))
   }
 
+  /**
+   * Export the current grid as a composite JPG.
+   */
   const doExport = useCallback(async ()=>{
     const blob = await exportGrid({ tiles: items, columns, showColor, mode })
     if (!blob) return
@@ -87,67 +128,79 @@ export default function App(){
 
   return (
     <div className="shell" onDragOver={e=>e.preventDefault()} onDrop={onDropInput}>
+      {/* Main content column */}
       <div className="page">
+
+        {/* Responsive toolbar: groups wrap on small viewports, align in one row on wide viewports */}
         <div className="toolbar">
-          <label className="btn" title="Add images">
-            <input ref={inputRef} type="file" accept="image/*" multiple onChange={onInputChange}/>
-            <span>＋ Add Images</span>
-          </label>
+          {/* Group 1: ingestion and export */}
+          <div className="toolbar-group">
+            <label className="btn" title="Add images">
+              <input ref={inputRef} type="file" accept="image/*" multiple onChange={onInputChange}/>
+              <span>Add Images</span>
+            </label>
 
-          <button className="btn" onClick={doExport} disabled={!items.length}>Export JPG</button>
-
-          <div className="toggle">
-            <input id="colormap" type="checkbox" checked={showColor} onChange={e=>setShowColor(e.target.checked)}/>
-            <label htmlFor="colormap">Color Map</label>
+            <button className="btn" onClick={doExport} disabled={!items.length}>Export JPG</button>
           </div>
 
-          <select className="select" value={mode} onChange={e=>setMode(e.target.value)}>
-            <option value="average">Average</option>
-            <option value="dominant">Dominant (3)</option>
-          </select>
+          {/* Group 2: color map controls */}
+          <div className="toolbar-group">
+            <div className="toggle">
+              <input id="colormap" type="checkbox" checked={showColor} onChange={e=>setShowColor(e.target.checked)}/>
+              <label htmlFor="colormap">Color Map</label>
+            </div>
 
-          <select className="select" value={overlayMode} onChange={e=>setOverlayMode(e.target.value)}>
-            <option value={OVERLAY_MODES.DOT}>Dot</option>
-            <option value={OVERLAY_MODES.HALF}>Half Overlay</option>
-            <option value={OVERLAY_MODES.FULL}>Full Overlay</option>
-          </select>
+            <select className="select" value={mode} onChange={e=>setMode(e.target.value)} aria-label="Color mode">
+              <option value="average">Average</option>
+              <option value="dominant">Dominant (3)</option>
+            </select>
 
-          <div style={{display:'flex', alignItems:'center', gap:'.5rem', minWidth: 140}}>
-            <label htmlFor="alpha" style={{fontSize:12, opacity:.8}}>Opacity</label>
-            <input
-              id="alpha"
-              type="range"
-              min="0"
-              max="2"
-              step="1"
-              value={overlayAlphaIdx}
-              onChange={(e)=>setOverlayAlphaIdx(parseInt(e.target.value,10))}
-              style={{width:100}}
-              list="alpha-stops"
-            />
-            <datalist id="alpha-stops">
-              <option value="0" label="20%"></option>
-              <option value="1" label="50%"></option>
-              <option value="2" label="80%"></option>
-            </datalist>
+            <select className="select" value={overlayMode} onChange={e=>setOverlayMode(e.target.value)} aria-label="Overlay mode">
+              <option value={OVERLAY_MODES.DOT}>Dot</option>
+              <option value={OVERLAY_MODES.HALF}>Half Overlay</option>
+              <option value={OVERLAY_MODES.FULL}>Full Overlay</option>
+            </select>
+
+            <div className="opacity-control">
+              <label htmlFor="alpha">Opacity</label>
+              <input
+                id="alpha"
+                type="range"
+                min="0"
+                max="2"
+                step="1"
+                value={overlayAlphaIdx}
+                onChange={(e)=>setOverlayAlphaIdx(parseInt(e.target.value,10))}
+                list="alpha-stops"
+                aria-label="Overlay opacity"
+              />
+              <datalist id="alpha-stops">
+                <option value="0" label="20%"></option>
+                <option value="1" label="50%"></option>
+                <option value="2" label="80%"></option>
+              </datalist>
+            </div>
           </div>
 
-          <div className="toggle">
-            <input id="sidepal" type="checkbox" checked={showSidebar} onChange={e=>setShowSidebar(e.target.checked)}/>
-            <label htmlFor="sidepal">Show Palette</label>
+          {/* Group 3: palette visibility */}
+          <div className="toolbar-group toolbar-group--end">
+            <div className="toggle">
+              <input id="sidepal" type="checkbox" checked={showSidebar} onChange={e=>setShowSidebar(e.target.checked)}/>
+              <label htmlFor="sidepal">Show Palette</label>
+            </div>
           </div>
         </div>
 
+        {/* Grid */}
         <RemoveContext.Provider value={(id)=>setItems(items=>items.filter(x=>x.id!==id))}>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={ids} strategy={rectSortingStrategy}>
               <div className="grid">
-                {items.map((it, idx)=>(
+                {items.map((it)=>(
                   <SortableTile
                     key={it.id}
                     id={it.id}
                     item={it}
-                    index={idx}
                     showColor={showColor}
                     mode={mode}
                     overlayMode={overlayMode}
@@ -160,6 +213,7 @@ export default function App(){
         </RemoveContext.Provider>
       </div>
 
+      {/* Sidebar palette (3 columns, one square per image, same order as grid) */}
       {showSidebar && (
         <aside className="sidebar">
           <div className="sidebarHeader">
@@ -189,12 +243,16 @@ export default function App(){
   )
 }
 
-function SortableTile({ id, item, index, showColor, mode, overlayMode, overlayAlpha }){
+/**
+ * Sortable grid tile with optional color overlays.
+ */
+function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha }){
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 5 : 'auto' }
   const swatches = mode==='average' ? [item.avg] : item.dom
   const remove = React.useContext(RemoveContext)
 
+  // Choose overlay tint color: average or most dominant cluster.
   const tint = (mode === 'average' ? item.avg : (item.dom[0] || item.avg))
   const rgba = (alpha) => `rgba(${tint[0]},${tint[1]},${tint[2]},${alpha})`
 
@@ -202,6 +260,7 @@ function SortableTile({ id, item, index, showColor, mode, overlayMode, overlayAl
     <div ref={setNodeRef} className="tile" style={style} {...attributes} {...listeners}>
       <img src={item.img.src} alt="" draggable={false}/>
 
+      {/* Half and Full overlays honor the selected alpha */}
       {showColor && overlayMode === OVERLAY_MODES.HALF && (
         <div className="overlay-half" style={{ background: rgba(overlayAlpha) }} />
       )}
@@ -209,6 +268,7 @@ function SortableTile({ id, item, index, showColor, mode, overlayMode, overlayAl
         <div className="overlay-full" style={{ background: rgba(overlayAlpha) }} />
       )}
 
+      {/* Dot mode shows swatches only */}
       {showColor && overlayMode === OVERLAY_MODES.DOT && (
         <div className="swatchBar">
           {swatches.map((rgb, i)=>(
@@ -227,6 +287,9 @@ function SortableTile({ id, item, index, showColor, mode, overlayMode, overlayAl
   )
 }
 
+/**
+ * Decode a File into a downscaled JPEG data URL for efficient persistence.
+ */
 function fileToDataURL(file, maxDim = 1600){
   return new Promise((resolve, reject)=>{
     const r = new FileReader()
@@ -249,6 +312,10 @@ function fileToDataURL(file, maxDim = 1600){
     r.readAsDataURL(file)
   })
 }
+
+/**
+ * Convert a data URL into an HTMLImageElement.
+ */
 function dataURLToImage(dataURL){
   return new Promise((resolve, reject)=>{
     const img = new Image()
