@@ -13,9 +13,7 @@ const STORAGE_KEY = 'gridtone:v1'
 const RemoveContext = React.createContext(()=>{})
 
 function saveState(items){
-  const lite = items.map(({id, img, avg, dom}) => ({
-    id, imgSrc: img?.src ?? '', avg, dom
-  }))
+  const lite = items.map(({id, img, avg, dom}) => ({ id, imgSrc: img?.src ?? '', avg, dom }))
   localStorage.setItem(STORAGE_KEY, JSON.stringify(lite))
 }
 function loadState(){
@@ -24,17 +22,25 @@ function loadState(){
     if (!raw) return []
     const lite = JSON.parse(raw)
     return lite.map((t) => {
-      const img = new Image()
-      img.src = t.imgSrc || ''
+      const img = new Image(); img.src = t.imgSrc || ''
       return { id: t.id, img, avg: t.avg, dom: t.dom }
     })
   } catch { return [] }
+}
+
+// NEW: overlay modes for color application on tiles
+const OVERLAY_MODES = {
+  DOT: 'dot',
+  HALF: 'half',
+  FULL: 'full'
 }
 
 export default function App(){
   const [items, setItems] = useState(()=>loadState())
   const [showColor, setShowColor] = useState(true)
   const [mode, setMode] = useState('average') // 'average' | 'dominant'
+  const [overlayMode, setOverlayMode] = useState(OVERLAY_MODES.DOT) // NEW
+  const [showSidebar, setShowSidebar] = useState(false) // NEW (off by default for mobile)
   const inputRef = useRef(null)
 
   React.useEffect(()=>{ saveState(items) }, [items])
@@ -45,8 +51,8 @@ export default function App(){
     const arr = []
     for (const file of files){
       if (!file.type.startsWith('image/')) continue
-      const dataURL = await fileToDataURL(file)     // downscale + encode
-      const img = await dataURLToImage(dataURL)     // build <img>
+      const dataURL = await fileToDataURL(file)
+      const img = await dataURLToImage(dataURL)
       const blob = await (await fetch(dataURL)).blob()
       const bmp = await createImageBitmap(blob)
       const avg = averageColorFromBitmap(bmp)
@@ -60,7 +66,7 @@ export default function App(){
   const onInputChange = (e)=> onFiles(e.target.files)
 
   const ids = items.map(i=>i.id)
-  const columns = useColumnEstimate()
+  const columns = 3 // fixed 3-up layout
 
   const handleDragEnd = (event) => {
     const { active, over } = event
@@ -70,11 +76,21 @@ export default function App(){
     setItems(arrayMove(items, oldIndex, newIndex))
   }
 
-  const globalPalette = useMemo(()=>{
-    const colors = mode==='average'
-      ? items.map(i=>i.avg)
-      : items.flatMap(i=>i.dom)
-    return sortByHue(colors)
+  // CHANGED: Sidebar palette follows grid order exactly (3-col layout)
+  const sidebarCells = useMemo(()=>{
+    // Build cells row-wise matching the grid order.
+    // If "average": repeat each image color 3x to fill 3 columns.
+    // If "dominant": use up to 3 colors; pad with average if missing.
+    const cells = []
+    for (const it of items) {
+      if (mode === 'average') {
+        cells.push(it.avg, it.avg, it.avg)
+      } else {
+        const [c0,c1,c2] = [it.dom[0] || it.avg, it.dom[1] || it.avg, it.dom[2] || it.avg]
+        cells.push(c0,c1,c2)
+      }
+    }
+    return cells
   }, [items, mode])
 
   const doExport = useCallback(async ()=>{
@@ -89,59 +105,99 @@ export default function App(){
   }, [items, columns, showColor, mode])
 
   return (
-    <div style={{minHeight:'100%'}} onDragOver={e=>e.preventDefault()} onDrop={onDropInput}>
-      <div className="toolbar">
-        <label className="btn" title="Add images">
-          <input ref={inputRef} type="file" accept="image/*" multiple onChange={onInputChange}/>
-          <span>＋ Add Images</span>
-        </label>
-        <button className="btn" onClick={doExport} disabled={!items.length}>Export JPG</button>
-        <div className="toggle">
-          <input id="colormap" type="checkbox" checked={showColor} onChange={e=>setShowColor(e.target.checked)}/>
-          <label htmlFor="colormap">Color Map</label>
+    <div className="shell" onDragOver={e=>e.preventDefault()} onDrop={onDropInput}>
+      {/* LEFT: main page */}
+      <div className="page">
+        <div className="toolbar">
+          <label className="btn" title="Add images">
+            <input ref={inputRef} type="file" accept="image/*" multiple onChange={onInputChange}/>
+            <span>＋ Add Images</span>
+          </label>
+
+          <button className="btn" onClick={doExport} disabled={!items.length}>Export JPG</button>
+
+          <div className="toggle">
+            <input id="colormap" type="checkbox" checked={showColor} onChange={e=>setShowColor(e.target.checked)}/>
+            <label htmlFor="colormap">Color Map</label>
+          </div>
+
+          <select className="select" value={mode} onChange={e=>setMode(e.target.value)}>
+            <option value="average">Average</option>
+            <option value="dominant">Dominant (3)</option>
+          </select>
+
+          {/* NEW: Overlay size selector */}
+          <select className="select" value={overlayMode} onChange={e=>setOverlayMode(e.target.value)}>
+            <option value={OVERLAY_MODES.DOT}>Dot</option>
+            <option value={OVERLAY_MODES.HALF}>Half Overlay</option>
+            <option value={OVERLAY_MODES.FULL}>Full Overlay</option>
+          </select>
+
+          {/* NEW: Sidebar toggle */}
+          <div className="toggle">
+            <input id="sidepal" type="checkbox" checked={showSidebar} onChange={e=>setShowSidebar(e.target.checked)}/>
+            <label htmlFor="sidepal">Show Palette</label>
+          </div>
         </div>
-        <select className="select" value={mode} onChange={e=>setMode(e.target.value)}>
-          <option value="average">Average</option>
-          <option value="dominant">Dominant (3)</option>
-        </select>
+
+        <RemoveContext.Provider value={(id)=>setItems(items=>items.filter(x=>x.id!==id))}>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={ids} strategy={rectSortingStrategy}>
+              <div className="grid">
+                {items.map((it)=>(
+                  <SortableTile key={it.id} id={it.id} item={it}
+                                showColor={showColor} mode={mode} overlayMode={overlayMode}/>
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        </RemoveContext.Provider>
+
+        <div style={{opacity:.6, fontSize:12, padding: '0 .75rem .75rem'}}>Tip: drag image files from your computer into the window.</div>
       </div>
 
-      {showColor && (
-        <div className="palette">
-          {globalPalette.map((c, i)=>(
-            <div key={i} style={{background:`rgb(${c[0]},${c[1]},${c[2]})`}}/>
-          ))}
-        </div>
+      {/* RIGHT: sidebar (3-col palette) */}
+      {showSidebar && (
+        <aside className="sidebar">
+          <div className="sidebarHeader">
+            <strong>Palette</strong>
+            <span style={{opacity:.6, fontSize:12}}>{mode === 'average' ? 'Avg ×3' : 'Dominant (3)'}</span>
+          </div>
+          <div className="palette3">
+            {sidebarCells.map((c, i)=>(
+              <div key={i} className="palette-cell" style={{background:`rgb(${c[0]},${c[1]},${c[2]})`}} title={rgbToHex(c)} />
+            ))}
+          </div>
+        </aside>
       )}
-
-      <RemoveContext.Provider value={(id)=>setItems(items=>items.filter(x=>x.id!==id))}>
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={ids} strategy={rectSortingStrategy}>
-            <div className="grid">
-              {items.map((it)=>(
-                <SortableTile key={it.id} id={it.id} item={it} showColor={showColor} mode={mode}/>
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-      </RemoveContext.Provider>
-
-      <div style={{opacity:.6, fontSize:12, padding: '0 .75rem .75rem'}}>Tip: drag image files from your computer into the window.</div>
     </div>
   )
 }
 
-function SortableTile({ id, item, showColor, mode }){
+function SortableTile({ id, item, showColor, mode, overlayMode }){
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 5 : 'auto' }
   const swatches = mode==='average' ? [item.avg] : item.dom
   const remove = React.useContext(RemoveContext)
 
+  // NEW: the overlay color uses avg or first dominant as tint
+  const tint = (mode === 'average' ? item.avg : (item.dom[0] || item.avg))
+  const rgba = (alpha) => `rgba(${tint[0]},${tint[1]},${tint[2]},${alpha})`
+
   return (
     <div ref={setNodeRef} className="tile" style={style} {...attributes} {...listeners}>
       <img src={item.img.src} alt="" draggable={false}/>
-      <button className="delete" onClick={(e)=>{ e.stopPropagation(); remove(id) }}>×</button>
-      {showColor && (
+
+      {/* NEW: Overlay modes */}
+      {showColor && overlayMode === 'HALF' && (
+        <div className="overlay-half" style={{ background: rgba(0.5) }} />
+      )}
+      {showColor && overlayMode === 'FULL' && (
+        <div className="overlay-full" style={{ background: rgba(0.35) }} />
+      )}
+
+      {/* Dot mode keeps the classic swatch bar */}
+      {showColor && overlayMode === 'DOT' && (
         <div className="swatchBar">
           {swatches.map((rgb, i)=>(
             <div key={i} className="swatch" style={{background:`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`}} title={rgbToHex(rgb)}/>
@@ -153,24 +209,10 @@ function SortableTile({ id, item, showColor, mode }){
           )}
         </div>
       )}
+
+      <button className="delete" onClick={(e)=>{ e.stopPropagation(); remove(id) }}>×</button>
     </div>
   )
-}
-
-function useColumnEstimate(){
-  const [cols, setCols] = useState(3)
-  React.useEffect(()=>{
-    const calc = ()=>{
-      const width = Math.max(document.documentElement.clientWidth, window.innerWidth || 0)
-      const min = 130, gap = 6
-      const c = Math.max(3, Math.min(6, Math.floor((width + gap)/(min+gap))))
-      setCols(c)
-    }
-    calc()
-    window.addEventListener('resize', calc)
-    return ()=>window.removeEventListener('resize', calc)
-  },[])
-  return cols
 }
 
 function fileToDataURL(file, maxDim = 1600){
