@@ -8,3 +8,6 @@
 
 ## Build
 - `npm run build` → outputs to `dist/`
+
+## Note
+- This is still a work in progress, do not be suprised if it does not work.
