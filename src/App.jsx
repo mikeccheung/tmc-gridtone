@@ -6,7 +6,7 @@ import {
   SortableContext, rectSortingStrategy, useSortable, arrayMove
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { averageColorFromBitmap, dominantColorsFromBitmap, rgbToHex, sortByHue } from './colorUtils'
+import { averageColorFromBitmap, dominantColorsFromBitmap, rgbToHex } from './colorUtils'
 import { exportGrid } from './exportUtils'
 
 const STORAGE_KEY = 'gridtone:v1'
@@ -28,19 +28,14 @@ function loadState(){
   } catch { return [] }
 }
 
-// NEW: overlay modes for color application on tiles
-const OVERLAY_MODES = {
-  DOT: 'dot',
-  HALF: 'half',
-  FULL: 'full'
-}
+const OVERLAY_MODES = { DOT:'dot', HALF:'half', FULL:'full' }
 
 export default function App(){
   const [items, setItems] = useState(()=>loadState())
   const [showColor, setShowColor] = useState(true)
   const [mode, setMode] = useState('average') // 'average' | 'dominant'
-  const [overlayMode, setOverlayMode] = useState(OVERLAY_MODES.DOT) // NEW
-  const [showSidebar, setShowSidebar] = useState(false) // NEW (off by default for mobile)
+  const [overlayMode, setOverlayMode] = useState(OVERLAY_MODES.DOT)
+  const [showSidebar, setShowSidebar] = useState(false)
   const inputRef = useRef(null)
 
   React.useEffect(()=>{ saveState(items) }, [items])
@@ -61,12 +56,11 @@ export default function App(){
     }
     setItems(prev=>prev.concat(arr))
   }
-
   const onDropInput = (e)=>{ e.preventDefault(); onFiles(e.dataTransfer.files) }
   const onInputChange = (e)=> onFiles(e.target.files)
 
   const ids = items.map(i=>i.id)
-  const columns = 3 // fixed 3-up layout
+  const columns = 3 // fixed 3-up grid
 
   const handleDragEnd = (event) => {
     const { active, over } = event
@@ -75,23 +69,6 @@ export default function App(){
     const newIndex = items.findIndex(i=>i.id===over.id)
     setItems(arrayMove(items, oldIndex, newIndex))
   }
-
-  // CHANGED: Sidebar palette follows grid order exactly (3-col layout)
-  const sidebarCells = useMemo(()=>{
-    // Build cells row-wise matching the grid order.
-    // If "average": repeat each image color 3x to fill 3 columns.
-    // If "dominant": use up to 3 colors; pad with average if missing.
-    const cells = []
-    for (const it of items) {
-      if (mode === 'average') {
-        cells.push(it.avg, it.avg, it.avg)
-      } else {
-        const [c0,c1,c2] = [it.dom[0] || it.avg, it.dom[1] || it.avg, it.dom[2] || it.avg]
-        cells.push(c0,c1,c2)
-      }
-    }
-    return cells
-  }, [items, mode])
 
   const doExport = useCallback(async ()=>{
     const blob = await exportGrid({ tiles: items, columns, showColor, mode: mode==='average'?'average':'dominant' })
@@ -106,7 +83,7 @@ export default function App(){
 
   return (
     <div className="shell" onDragOver={e=>e.preventDefault()} onDrop={onDropInput}>
-      {/* LEFT: main page */}
+      {/* LEFT: main */}
       <div className="page">
         <div className="toolbar">
           <label className="btn" title="Add images">
@@ -126,14 +103,12 @@ export default function App(){
             <option value="dominant">Dominant (3)</option>
           </select>
 
-          {/* NEW: Overlay size selector */}
           <select className="select" value={overlayMode} onChange={e=>setOverlayMode(e.target.value)}>
             <option value={OVERLAY_MODES.DOT}>Dot</option>
             <option value={OVERLAY_MODES.HALF}>Half Overlay</option>
             <option value={OVERLAY_MODES.FULL}>Full Overlay</option>
           </select>
 
-          {/* NEW: Sidebar toggle */}
           <div className="toggle">
             <input id="sidepal" type="checkbox" checked={showSidebar} onChange={e=>setShowSidebar(e.target.checked)}/>
             <label htmlFor="sidepal">Show Palette</label>
@@ -144,9 +119,16 @@ export default function App(){
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={ids} strategy={rectSortingStrategy}>
               <div className="grid">
-                {items.map((it)=>(
-                  <SortableTile key={it.id} id={it.id} item={it}
-                                showColor={showColor} mode={mode} overlayMode={overlayMode}/>
+                {items.map((it, idx)=>(
+                  <SortableTile
+                    key={it.id}
+                    id={it.id}
+                    item={it}
+                    index={idx}
+                    showColor={showColor}
+                    mode={mode}
+                    overlayMode={overlayMode}
+                  />
                 ))}
               </div>
             </SortableContext>
@@ -156,16 +138,28 @@ export default function App(){
         <div style={{opacity:.6, fontSize:12, padding: '0 .75rem .75rem'}}>Tip: drag image files from your computer into the window.</div>
       </div>
 
-      {/* RIGHT: sidebar (3-col palette) */}
+      {/* RIGHT: sidebar – 3 columns, one square per image (same order as grid) */}
       {showSidebar && (
         <aside className="sidebar">
           <div className="sidebarHeader">
             <strong>Palette</strong>
-            <span style={{opacity:.6, fontSize:12}}>{mode === 'average' ? 'Avg ×3' : 'Dominant (3)'}</span>
+            <span style={{opacity:.6, fontSize:12}}>{mode === 'average' ? 'Average' : 'Dominant (3)'}</span>
           </div>
+
           <div className="palette3">
-            {sidebarCells.map((c, i)=>(
-              <div key={i} className="palette-cell" style={{background:`rgb(${c[0]},${c[1]},${c[2]})`}} title={rgbToHex(c)} />
+            {items.map((it, i)=>(
+              <div key={it.id} className="palette-cell" title={`#${i+1}`}>
+                <div className="pal-index">{i+1}</div>
+                {mode === 'average' ? (
+                  <div className="palette-fill" style={{background:`rgb(${it.avg[0]},${it.avg[1]},${it.avg[2]})`}} />
+                ) : (
+                  <>
+                    <div className="palette-stripe" style={{background:`rgb(${(it.dom[0]||it.avg)[0]},${(it.dom[0]||it.avg)[1]},${(it.dom[0]||it.avg)[2]})`}} />
+                    <div className="palette-stripe" style={{background:`rgb(${(it.dom[1]||it.avg)[0]},${(it.dom[1]||it.avg)[1]},${(it.dom[1]||it.avg)[2]})`}} />
+                    <div className="palette-stripe" style={{background:`rgb(${(it.dom[2]||it.avg)[0]},${(it.dom[2]||it.avg)[1]},${(it.dom[2]||it.avg)[2]})`}} />
+                  </>
+                )}
+              </div>
             ))}
           </div>
         </aside>
@@ -174,13 +168,12 @@ export default function App(){
   )
 }
 
-function SortableTile({ id, item, showColor, mode, overlayMode }){
+function SortableTile({ id, item, index, showColor, mode, overlayMode }){
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 5 : 'auto' }
   const swatches = mode==='average' ? [item.avg] : item.dom
   const remove = React.useContext(RemoveContext)
 
-  // NEW: the overlay color uses avg or first dominant as tint
   const tint = (mode === 'average' ? item.avg : (item.dom[0] || item.avg))
   const rgba = (alpha) => `rgba(${tint[0]},${tint[1]},${tint[2]},${alpha})`
 
@@ -188,16 +181,15 @@ function SortableTile({ id, item, showColor, mode, overlayMode }){
     <div ref={setNodeRef} className="tile" style={style} {...attributes} {...listeners}>
       <img src={item.img.src} alt="" draggable={false}/>
 
-      {/* NEW: Overlay modes */}
-      {showColor && overlayMode === 'HALF' && (
+      {/* ✅ FIXED: compare against OVERLAY_MODES constants (was string mismatch) */}
+      {showColor && overlayMode === OVERLAY_MODES.HALF && (
         <div className="overlay-half" style={{ background: rgba(0.5) }} />
       )}
-      {showColor && overlayMode === 'FULL' && (
+      {showColor && overlayMode === OVERLAY_MODES.FULL && (
         <div className="overlay-full" style={{ background: rgba(0.35) }} />
       )}
 
-      {/* Dot mode keeps the classic swatch bar */}
-      {showColor && overlayMode === 'DOT' && (
+      {showColor && overlayMode === OVERLAY_MODES.DOT && (
         <div className="swatchBar">
           {swatches.map((rgb, i)=>(
             <div key={i} className="swatch" style={{background:`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`}} title={rgbToHex(rgb)}/>
