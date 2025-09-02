@@ -44,6 +44,18 @@ export function dominantColorsFromBitmap(bitmap, k=3, samples=4000, max=96, iter
     }
   }
 
+  // one final assignment to get cluster sizes, then sort by size desc
+  const counts = Array(k).fill(0)
+  for (const p of pts) counts[nearest(centers, p)]++
+
+  return centers
+    .map((c,i)=>({c,n:counts[i]}))
+    .filter(x=>x.n>0)
+    .sort((a,b)=>b.n - a.n)
+    .slice(0,k)
+    .map(x=>x.c)
+}
+
 function nearest(centers, p){
   let bi=0, bd=Infinity
   for (let i=0;i<centers.length;i++){
@@ -85,16 +97,4 @@ function rgbToHue([r,g,b]){
     h/=6
   }
   return h
-}
-
-  // one final assignment to get cluster sizes, then sort by size desc
-  const counts = Array(k).fill(0)
-  for (const p of pts) counts[nearest(centers, p)]++
-
-  return centers
-    .map((c,i)=>({c,n:counts[i]}))
-    .filter(x=>x.n>0)
-    .sort((a,b)=>b.n - a.n)
-    .slice(0,k)
-    .map(x=>x.c)
 }
