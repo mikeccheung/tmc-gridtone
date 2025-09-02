@@ -25,12 +25,10 @@ export function dominantColorsFromBitmap(bitmap, k=3, samples=4000, max=96, iter
   }
   if (!pts.length) return []
 
-  // init centers (first k)
   let centers = pts.slice(0,k).map(p=>p.slice())
 
-  // k-means iterations
   for (let iter=0; iter<iters; iter++) {
-    const sums = Array.from({length:k},()=>[0,0,0,0]) // r,g,b,count
+    const sums = Array.from({length:k},()=>[0,0,0,0])
     for (const p of pts) {
       const j = nearest(centers, p)
       sums[j][0]+=p[0]; sums[j][1]+=p[1]; sums[j][2]+=p[2]; sums[j][3]++
@@ -44,7 +42,6 @@ export function dominantColorsFromBitmap(bitmap, k=3, samples=4000, max=96, iter
     }
   }
 
-  // one final assignment to get cluster sizes, then sort by size desc
   const counts = Array(k).fill(0)
   for (const p of pts) counts[nearest(centers, p)]++
 
@@ -66,7 +63,6 @@ function nearest(centers, p){
   }
   return bi
 }
-function luma([r,g,b]) { return 0.2126*r + 0.7152*g + 0.0722*b }
 
 export function rgbToHex([r,g,b]){
   return '#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('').toUpperCase()
@@ -80,21 +76,4 @@ function drawBitmap(bitmap, max){
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.drawImage(bitmap, 0, 0, scaledW, scaledH)
   return { ctx, scaledW, scaledH }
-}
-
-export function sortByHue(colors){
-  return [...colors].sort((a,b)=>rgbToHue(a)-rgbToHue(b))
-}
-function rgbToHue([r,g,b]){
-  r/=255; g/=255; b/=255
-  const max=Math.max(r,g,b), min=Math.min(r,g,b)
-  const d=max-min
-  let h=0
-  if (d!==0){
-    if (max===r) h=(g-b)/d + (g<b?6:0)
-    else if (max===g) h=(b-r)/d + 2
-    else h=(r-g)/d + 4
-    h/=6
-  }
-  return h
 }

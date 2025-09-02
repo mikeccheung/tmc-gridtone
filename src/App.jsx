@@ -29,12 +29,14 @@ function loadState(){
 }
 
 const OVERLAY_MODES = { DOT:'dot', HALF:'half', FULL:'full' }
+const OVERLAY_ALPHAS = [0.2, 0.5, 0.8]
 
 export default function App(){
   const [items, setItems] = useState(()=>loadState())
   const [showColor, setShowColor] = useState(true)
-  const [mode, setMode] = useState('average') // 'average' | 'dominant'
+  const [mode, setMode] = useState('average')
   const [overlayMode, setOverlayMode] = useState(OVERLAY_MODES.DOT)
+  const [overlayAlphaIdx, setOverlayAlphaIdx] = useState(1)
   const [showSidebar, setShowSidebar] = useState(false)
   const inputRef = useRef(null)
 
@@ -60,7 +62,7 @@ export default function App(){
   const onInputChange = (e)=> onFiles(e.target.files)
 
   const ids = items.map(i=>i.id)
-  const columns = 3 // fixed 3-up grid
+  const columns = 3
 
   const handleDragEnd = (event) => {
     const { active, over } = event
@@ -71,7 +73,7 @@ export default function App(){
   }
 
   const doExport = useCallback(async ()=>{
-    const blob = await exportGrid({ tiles: items, columns, showColor, mode: mode==='average'?'average':'dominant' })
+    const blob = await exportGrid({ tiles: items, columns, showColor, mode })
     if (!blob) return
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -81,9 +83,10 @@ export default function App(){
     URL.revokeObjectURL(url)
   }, [items, columns, showColor, mode])
 
+  const overlayAlpha = OVERLAY_ALPHAS[overlayAlphaIdx]
+
   return (
     <div className="shell" onDragOver={e=>e.preventDefault()} onDrop={onDropInput}>
-      {/* LEFT: main */}
       <div className="page">
         <div className="toolbar">
           <label className="btn" title="Add images">
@@ -109,6 +112,26 @@ export default function App(){
             <option value={OVERLAY_MODES.FULL}>Full Overlay</option>
           </select>
 
+          <div style={{display:'flex', alignItems:'center', gap:'.5rem', minWidth: 140}}>
+            <label htmlFor="alpha" style={{fontSize:12, opacity:.8}}>Opacity</label>
+            <input
+              id="alpha"
+              type="range"
+              min="0"
+              max="2"
+              step="1"
+              value={overlayAlphaIdx}
+              onChange={(e)=>setOverlayAlphaIdx(parseInt(e.target.value,10))}
+              style={{width:100}}
+              list="alpha-stops"
+            />
+            <datalist id="alpha-stops">
+              <option value="0" label="20%"></option>
+              <option value="1" label="50%"></option>
+              <option value="2" label="80%"></option>
+            </datalist>
+          </div>
+
           <div className="toggle">
             <input id="sidepal" type="checkbox" checked={showSidebar} onChange={e=>setShowSidebar(e.target.checked)}/>
             <label htmlFor="sidepal">Show Palette</label>
@@ -128,17 +151,15 @@ export default function App(){
                     showColor={showColor}
                     mode={mode}
                     overlayMode={overlayMode}
+                    overlayAlpha={overlayAlpha}
                   />
                 ))}
               </div>
             </SortableContext>
           </DndContext>
         </RemoveContext.Provider>
-
-        <div style={{opacity:.6, fontSize:12, padding: '0 .75rem .75rem'}}>Tip: drag image files from your computer into the window.</div>
       </div>
 
-      {/* RIGHT: sidebar – 3 columns, one square per image (same order as grid) */}
       {showSidebar && (
         <aside className="sidebar">
           <div className="sidebarHeader">
@@ -168,7 +189,7 @@ export default function App(){
   )
 }
 
-function SortableTile({ id, item, index, showColor, mode, overlayMode }){
+function SortableTile({ id, item, index, showColor, mode, overlayMode, overlayAlpha }){
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 5 : 'auto' }
   const swatches = mode==='average' ? [item.avg] : item.dom
@@ -181,12 +202,11 @@ function SortableTile({ id, item, index, showColor, mode, overlayMode }){
     <div ref={setNodeRef} className="tile" style={style} {...attributes} {...listeners}>
       <img src={item.img.src} alt="" draggable={false}/>
 
-      {/* ✅ FIXED: compare against OVERLAY_MODES constants (was string mismatch) */}
       {showColor && overlayMode === OVERLAY_MODES.HALF && (
-        <div className="overlay-half" style={{ background: rgba(0.5) }} />
+        <div className="overlay-half" style={{ background: rgba(overlayAlpha) }} />
       )}
       {showColor && overlayMode === OVERLAY_MODES.FULL && (
-        <div className="overlay-full" style={{ background: rgba(0.35) }} />
+        <div className="overlay-full" style={{ background: rgba(overlayAlpha) }} />
       )}
 
       {showColor && overlayMode === OVERLAY_MODES.DOT && (
