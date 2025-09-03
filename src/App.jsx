@@ -1,6 +1,6 @@
 // App shell: orchestrates state and composes modular components.
 
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { OVERLAY_MODES, OVERLAY_ALPHAS, GRID_COLUMNS } from './constants'
 import { saveTiles, loadTiles } from './state/storage'
 import { useImageImporter } from './hooks/useImageImporter'
@@ -49,8 +49,9 @@ export default function App() {
   const columns = GRID_COLUMNS
   const overlayAlpha = OVERLAY_ALPHAS[overlayAlphaIdx]
 
-  const openPreview = useCallback(async () => {
-    if (!items.length) return
+  // Generate/refresh preview into an object URL (revokes previous first)
+  const generatePreview = useCallback(async () => {
+    if (!previewOpen || !items.length) return
     if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null) }
 
     const url = await exportGridObjectURL({
@@ -63,11 +64,22 @@ export default function App() {
       spacing: 12,
       background: '#0f0f10',
     })
-    if (url) {
-      setPreviewUrl(url)
-      setPreviewOpen(true)
-    }
-  }, [items, columns, previewIncludeOverlays, showColor, mode, overlayMode, overlayAlpha, previewUrl])
+    if (url) setPreviewUrl(url)
+  }, [
+    previewOpen,
+    items, columns,
+    previewIncludeOverlays, showColor, mode, overlayMode, overlayAlpha,
+    previewUrl
+  ])
+
+  // Open modal and render first preview
+  const openPreview = useCallback(async () => {
+    if (!items.length) return
+    setPreviewOpen(true)
+  }, [items.length])
+
+  // Auto-refresh preview whenever relevant state changes while modal is open
+  useEffect(() => { generatePreview() }, [generatePreview])
 
   const closePreview = useCallback(() => {
     setPreviewOpen(false)
@@ -243,7 +255,6 @@ export default function App() {
             />
             <span>Include overlays (use current Color Map/Mode/Opacity)</span>
           </label>
-          <button className="btn" onClick={openPreview}>Refresh Preview</button>
           <button className="btn" onClick={downloadExport}>Download JPG</button>
         </div>
         <div className="modal-body">
