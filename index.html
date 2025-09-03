@@ -6,44 +6,10 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#111111" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <meta name="theme-color" content="#0f0f10" />
     <title>GridTone PWA</title>
-    <style>
-      .modal-backdrop{
-        position: fixed; inset: 0;
-        background: rgba(0,0,0,.55);
-        backdrop-filter: blur(2px);
-        display: grid; place-items: center;
-        z-index: 1000;
-      }
-      .modal{
-        width: min(92vw, 900px);
-        max-height: 88vh;
-        overflow: hidden;
-        background: linear-gradient(180deg, #1b1b1d, #131315);
-        border: 1px solid rgba(255,255,255,.08);
-        border-radius: 14px;
-        box-shadow: 0 20px 60px rgba(0,0,0,.45);
-        display: grid; grid-template-rows: auto auto 1fr;
-      }
-      .modal-header{
-        display:flex; align-items:center; justify-content:space-between;
-        padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.08);
-      }
-      .modal-close{
-        width:28px; height:28px; border-radius:999px; cursor:pointer;
-        background:rgba(0,0,0,.5); color:#fff; border:1px solid rgba(255,255,255,.2);
-      }
-      .modal-controls{
-        padding: 10px 14px; display:flex; gap:10px; align-items:center; flex-wrap: wrap;
-        border-bottom: 1px solid rgba(255,255,255,.08);
-      }
-      .modal-body{
-        padding: 12px; overflow:auto; background: #0f0f10;
-      }
-    </style>
+    <!-- Single external stylesheet (served from /public) -->
+    <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <div id="root"></div>
