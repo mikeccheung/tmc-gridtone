@@ -13,6 +13,7 @@ import {
   rgbToHex
 } from './colorUtils'
 import { exportGrid, exportGridObjectURL } from './exportUtils'
+import Modal from './Modal'
 
 /**
  * Constants and helpers.
@@ -66,6 +67,9 @@ export default function App(){
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
+  /**
+   * Importer.
+   */
   const onFiles = async (files) => {
     if (!files || !files.length) return
     setImporting(true)
@@ -117,6 +121,9 @@ export default function App(){
     setItems(arrayMove(items, oldIndex, newIndex))
   }
 
+  /**
+   * Export preview: generates a smaller composite and shows it in a modal.
+   */
   const openPreview = useCallback(async () => {
     if (!items.length) return
     if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null) }
@@ -145,6 +152,9 @@ export default function App(){
     }
   }, [previewUrl])
 
+  /**
+   * Final export at full resolution.
+   */
   const downloadExport = useCallback(async ()=>{
     if (!items.length) return
     const blob = await exportGrid({
@@ -197,7 +207,7 @@ export default function App(){
       <section className="hero">
         <div className="hero-inner">
           <h1>Visualize your grid. Nail the tone.</h1>
-          <p>Drag, reorder, and color-check your posts with instant overlays and a palette that mirrors your layout. Install as a PWA and plan anywhere.</p>
+        <p>Drag, reorder, and color-check your posts with instant overlays and a palette that mirrors your layout. Install as a PWA and plan anywhere.</p>
           <div className="hero-actions">
             <label className="btn">
               <input ref={inputRef} type="file" accept="image/*" multiple onChange={onInputChange}/>
@@ -366,32 +376,36 @@ export default function App(){
         </div>
       </footer>
 
-      {/* Export Preview Modal */}
-      {previewOpen && (
-        <div className="modal-backdrop" onClick={closePreview}>
-          <div className="modal" onClick={(e)=>e.stopPropagation()}>
-            <div className="modal-header">
-              <strong>Export Preview</strong>
-              <button className="modal-close" onClick={closePreview}>×</button>
-            </div>
-            <div className="modal-controls">
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={previewIncludeOverlays}
-                  onChange={(e)=>setPreviewIncludeOverlays(e.target.checked)}
-                />
-                <span>Include overlays (use current Color Map/Mode/Opacity)</span>
-              </label>
-              <button className="btn" onClick={openPreview}>Refresh Preview</button>
-              <button className="btn" onClick={downloadExport}>Download JPG</button>
-            </div>
-            <div className="modal-body">
-              {previewUrl ? <img src={previewUrl} alt="Export preview" style={{maxWidth:'100%', height:'auto', display:'block', margin:'0 auto', borderRadius:12}}/> : <div>Generating…</div>}
-            </div>
-          </div>
+      {/* Export Preview Modal (portal) */}
+      <Modal open={previewOpen} onClose={closePreview} title="Export Preview">
+        <div className="modal-header">
+          <strong>Export Preview</strong>
+          <button className="modal-close" onClick={closePreview} aria-label="Close">×</button>
         </div>
-      )}
+        <div className="modal-controls">
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={previewIncludeOverlays}
+              onChange={(e)=>setPreviewIncludeOverlays(e.target.checked)}
+            />
+            <span>Include overlays (use current Color Map/Mode/Opacity)</span>
+          </label>
+          <button className="btn" onClick={openPreview}>Refresh Preview</button>
+          <button className="btn" onClick={downloadExport}>Download JPG</button>
+        </div>
+        <div className="modal-body">
+          {previewUrl ? (
+            <img
+              src={previewUrl}
+              alt="Export preview"
+              style={{maxWidth:'100%', height:'auto', display:'block', margin:'0 auto', borderRadius:12}}
+            />
+          ) : (
+            <div>Generating…</div>
+          )}
+        </div>
+      </Modal>
     </>
   )
 }
