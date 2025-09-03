@@ -77,10 +77,8 @@ export default function App(){
   const [activeId, setActiveId] = useState(null)
 
   const inputRef = useRef(null)
-
   React.useEffect(()=>{ saveState(items) }, [items])
 
-  // Pointer sensor with a small activation distance for snappy picks.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   /**
@@ -107,7 +105,6 @@ export default function App(){
 
         bmp.close?.()
         appended.push({ id: crypto.randomUUID(), img, avg, dom })
-        // Keep UI responsive on large batches.
         // eslint-disable-next-line no-await-in-loop
         await new Promise(r => setTimeout(r, 0))
       } catch (e) {
@@ -127,12 +124,8 @@ export default function App(){
   const ids = items.map(i=>i.id)
   const columns = 3
 
-  const handleDragStart = (event) => {
-    setActiveId(event.active?.id ?? null)
-  }
-  const handleDragCancel = () => {
-    setActiveId(null)
-  }
+  const handleDragStart = (event) => setActiveId(event.active?.id ?? null)
+  const handleDragCancel = () => setActiveId(null)
   const handleDragEnd = (event) => {
     const { active, over } = event
     setActiveId(null)
@@ -142,14 +135,18 @@ export default function App(){
     setItems(arrayMove(items, oldIndex, newIndex))
   }
 
+  /**
+   * Clean export (no overlays). This fixes “weird collage” by enforcing square center-crop.
+   * If you ever want an “Export with overlays”, pass includeOverlays: true below.
+   */
   const doExport = useCallback(async ()=>{
     const blob = await exportGrid({
       tiles: items,
       columns,
-      showColor,
-      mode,
-      overlayMode: overlayMode.toLowerCase(),
-      overlayAlpha: OVERLAY_ALPHAS[overlayAlphaIdx]
+      includeOverlays: false,                 // clean export by default
+      showColor, mode, overlayMode,           // kept for future "with overlays"
+      overlayAlpha: OVERLAY_ALPHAS[overlayAlphaIdx],
+      tileSize: 512, spacing: 12, background: '#0f0f10'
     })
     if (!blob) return
     const url = URL.createObjectURL(blob)
@@ -162,10 +159,7 @@ export default function App(){
 
   const overlayAlpha = OVERLAY_ALPHAS[overlayAlphaIdx]
 
-  // Helpers
   const getItemById = (id) => items.find(t => t.id === id)
-
-  // Close the mobile menu after any nav link is clicked.
   const handleNavClick = () => setNavOpen(false)
 
   return (
@@ -289,7 +283,6 @@ export default function App(){
                 </div>
               </SortableContext>
 
-              {/* The overlay follows the pointer during drag */}
               <DragOverlay dropAnimation={null}>
                 {activeId ? (
                   <DragPreview
@@ -297,7 +290,7 @@ export default function App(){
                     showColor={showColor}
                     mode={mode}
                     overlayMode={overlayMode}
-                    overlayAlpha={overlayAlpha}
+                    overlayAlpha={OVERLAY_ALPHAS[overlayAlphaIdx]}
                   />
                 ) : null}
               </DragOverlay>
@@ -369,8 +362,7 @@ export default function App(){
 }
 
 /**
- * Sortable grid tile.
- * While dragging, dnd-kit applies a transform; we keep animations minimal to avoid conflicts.
+ * Sortable grid tile
  */
 function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha }){
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
@@ -400,18 +392,18 @@ function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha }){
     <div ref={setNodeRef} className={tileClass} style={style} {...attributes} {...listeners}>
       <img src={item.img.src} alt="" draggable={false}/>
 
-      {showColor && overlayMode === OVERLAY_MODES.HALF && (
+      {showColor && overlayMode === 'half' && (
         mode === 'average'
           ? <div className="overlay-half" style={{ background: `rgba(${tint[0]},${tint[1]},${tint[2]},${overlayAlpha})` }} />
           : <div className="overlay-half" style={{ backgroundImage: dominantGradient }} />
       )}
-      {showColor && overlayMode === OVERLAY_MODES.FULL && (
+      {showColor && overlayMode === 'full' && (
         mode === 'average'
           ? <div className="overlay-full" style={{ background: `rgba(${tint[0]},${tint[1]},${tint[2]},${overlayAlpha})` }} />
           : <div className="overlay-full" style={{ backgroundImage: dominantGradient }} />
       )}
 
-      {showColor && overlayMode === OVERLAY_MODES.DOT && (
+      {showColor && overlayMode === 'dot' && (
         <div className="swatchBar">
           {swatches.map((rgb, i)=>(
             <div key={i} className="swatch" style={{background:`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`}} title={rgbToHex(rgb)}/>
@@ -431,7 +423,6 @@ function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha }){
 
 /**
  * Drag preview for the overlay that follows the cursor.
- * It mirrors the tile visuals but without sortable listeners/attributes.
  */
 function DragPreview({ tile, showColor, mode, overlayMode, overlayAlpha }){
   if (!tile) return null
@@ -447,17 +438,17 @@ function DragPreview({ tile, showColor, mode, overlayMode, overlayAlpha }){
   return (
     <div className="tile dragging" style={{ width: 240, height: 240, transition: 'none' }}>
       <img src={tile.img.src} alt="" draggable={false} style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
-      {showColor && overlayMode === OVERLAY_MODES.HALF && (
+      {showColor && overlayMode === 'half' && (
         mode === 'average'
           ? <div className="overlay-half" style={{ background: `rgba(${tint[0]},${tint[1]},${tint[2]},${overlayAlpha})` }} />
           : <div className="overlay-half" style={{ backgroundImage: grad }} />
       )}
-      {showColor && overlayMode === OVERLAY_MODES.FULL && (
+      {showColor && overlayMode === 'full' && (
         mode === 'average'
           ? <div className="overlay-full" style={{ background: `rgba(${tint[0]},${tint[1]},${tint[2]},${overlayAlpha})` }} />
           : <div className="overlay-full" style={{ backgroundImage: grad }} />
       )}
-      {showColor && overlayMode === OVERLAY_MODES.DOT && (
+      {showColor && overlayMode === 'dot' && (
         <div className="swatchBar" style={{ pointerEvents:'none' }}>
           {swatches.map((rgb, i)=>(
             <div key={i} className="swatch" style={{background:`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`}}/>
