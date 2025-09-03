@@ -1,5 +1,4 @@
-// Sortable grid, drag overlay, and tile rendering.
-// Keeps DnD logic local to the grid component.
+// Sortable grid with long-press-to-drag activation and touch-friendly scrolling.
 
 import React, { useMemo } from 'react'
 import {
@@ -13,7 +12,7 @@ import {
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { OVERLAY_MODES } from '../constants'
-import { rgbToHex } from '../colorUtils' // <-- keep this import
+import { rgbToHex } from '../colorUtils'
 
 export default function Grid({
   items,
@@ -28,7 +27,13 @@ export default function Grid({
   onAddClick,
   onDropFiles,
 }) {
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  // Long-press to drag (works for mouse & touch via PointerSensor).
+  // delay: press-and-hold duration before drag activates
+  // tolerance: how much the pointer can move during the delay without cancelling
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
+  )
+
   const ids = items.map((i) => i.id)
 
   const handleDragStart = (event) => setActiveId(event.active?.id ?? null)

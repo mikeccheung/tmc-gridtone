@@ -358,3 +358,8 @@ img { display: block; max-width: 100%; height: auto; }
 .empty-hero { font-size: 40px; line-height: 1; opacity: .85; margin-bottom: 6px; }
 .empty-title { font-weight: 600; color: var(--text); margin-bottom: 2px; }
 .empty-sub { margin-bottom: 10px; }
+
+/* Smooth long-press drag & better touch scroll */
+.grid { touch-action: pan-y; }                 /* allow vertical scroll when not dragging */
+.tile, .tile * { user-select: none; }          /* prevent text/image selection while pressing */
+.tile img { -webkit-user-drag: none; }         /* stop native image drag ghost */
