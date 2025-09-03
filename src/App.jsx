@@ -16,8 +16,10 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
 
-  // Grid state
-  const [items, setItems] = useState(() => loadTiles())
+  // Grid state (load async from IndexedDB)
+  const [items, setItems] = useState([])
+  useEffect(() => { (async () => setItems(await loadTiles()))() }, [])
+
   const [activeId, setActiveId] = useState(null)
 
   // Color overlay controls
@@ -34,13 +36,13 @@ export default function App() {
   const { importing, importFiles } = useImageImporter()
   const inputRef = useRef(null)
 
-  // Persist on changes
-  React.useEffect(() => { saveTiles(items) }, [items])
+  // Persist to IndexedDB whenever items change (best-effort; failures are non-fatal)
+  useEffect(() => { saveTiles(items) }, [items])
 
   // Import handlers
   const onFiles = async (files) => {
     const newTiles = await importFiles(files)
-    if (newTiles.length) setItems((prev) => prev.concat(newTiles))
+    if (newTiles.length) setItems(prev => prev.concat(newTiles))
   }
   const onDropInput = (e) => { e.preventDefault(); onFiles(e.dataTransfer.files) }
   const onInputChange = (e) => onFiles(e.target.files)
@@ -49,7 +51,6 @@ export default function App() {
   const columns = GRID_COLUMNS
   const overlayAlpha = OVERLAY_ALPHAS[overlayAlphaIdx]
 
-  // Generate/refresh preview into an object URL (revokes previous first)
   const generatePreview = useCallback(async () => {
     if (!previewOpen || !items.length) return
     if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null) }
@@ -65,28 +66,18 @@ export default function App() {
       background: '#0f0f10',
     })
     if (url) setPreviewUrl(url)
-  }, [
-    previewOpen,
-    items, columns,
-    previewIncludeOverlays, showColor, mode, overlayMode, overlayAlpha,
-    previewUrl
-  ])
+  }, [previewOpen, items, columns, previewIncludeOverlays, showColor, mode, overlayMode, overlayAlpha, previewUrl])
 
-  // Open modal and render first preview
-  const openPreview = useCallback(async () => {
+  const openPreview = useCallback(() => {
     if (!items.length) return
     setPreviewOpen(true)
   }, [items.length])
 
-  // Auto-refresh preview whenever relevant state changes while modal is open
   useEffect(() => { generatePreview() }, [generatePreview])
 
   const closePreview = useCallback(() => {
     setPreviewOpen(false)
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl)
-      setPreviewUrl(null)
-    }
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null) }
   }, [previewUrl])
 
   const downloadExport = useCallback(async () => {
@@ -110,7 +101,7 @@ export default function App() {
     URL.revokeObjectURL(url)
   }, [items, columns, previewIncludeOverlays, showColor, mode, overlayMode, overlayAlpha])
 
-  // Sample 3×3 and Clear Grid
+  // Sample 3×3 and Clear Grid (now produce blobs so they persist nicely)
   const loadSampleGrid = useCallback(async () => {
     if (items.length) {
       const ok = window.confirm('Replace current grid with a 3×3 sample? This will discard your current arrangement.')
@@ -121,7 +112,9 @@ export default function App() {
     for (let i = 0; i < 9; i++) {
       // eslint-disable-next-line no-await-in-loop
       const t = await createPlaceholderTile({ rgb: colors[i], label: i + 1, size: 900 })
-      tiles.push(t)
+      // Convert the canvas result (dataURL inside util) to a Blob for IDB
+      const blob = await fetch(t.img.src).then(r => r.blob()).catch(()=>null)
+      tiles.push({ ...t, blob })
     }
     setItems(tiles)
   }, [items.length])
@@ -199,7 +192,7 @@ export default function App() {
             showColor={showColor}
             mode={mode}
             overlayMode={overlayMode}
-            overlayAlpha={overlayAlpha}
+            overlayAlpha={OVERLAY_ALPHAS[overlayAlphaIdx]}
           />
         </div>
 
@@ -255,7 +248,7 @@ export default function App() {
             />
             <span>Include overlays (use current Color Map/Mode/Opacity)</span>
           </label>
-          <button className="btn" onClick={downloadExport}>Download JPG</button>
+          <button className="btn" onClick={async () => downloadExport()}>Download JPG</button>
         </div>
         <div className="modal-body">
           {previewUrl ? (
