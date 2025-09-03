@@ -39,5 +39,19 @@ jobs:
       - name: Sync to S3 (private bucket behind CloudFront OAC)
         run: aws s3 sync dist/ s3://$S3_BUCKET --delete
 
+      - name: Who am I?
+        run: aws sts get-caller-identity
+
+      - name: Show CF env var (check for spaces/newlines)
+        run: |
+          echo "CF_DISTRIBUTION_ID='${CF_DISTRIBUTION_ID}'"
+          printf 'LEN=%s\n' "${#CF_DISTRIBUTION_ID}"
+
+      - name: Find distribution by ID (in this account)
+        run: |
+          aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Id=='${CF_DISTRIBUTION_ID}'].[Id,DomainName,Aliases.Items]" \
+            --output table
+
       - name: Invalidate CloudFront
         run: aws cloudfront create-invalidation --distribution-id $CF_DISTRIBUTION_ID --paths "/*"
