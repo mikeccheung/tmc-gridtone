@@ -6,13 +6,14 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate', // clients update themselves
+      registerType: 'autoUpdate',
       injectRegister: 'auto',
       includeAssets: [
         'favicon.svg',
         'apple-touch-icon.png',
         'icons/icon-192.png',
-        'icons/icon-512.png'
+        'icons/icon-512.png',
+        'icons/icon-512-maskable.png'
       ],
       manifest: {
         name: 'GridTone',
@@ -29,14 +30,11 @@ export default defineConfig({
           { src: 'icons/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
         ]
       },
-      // ---- THIS fixes the build: give Workbox something to cache ----
+      // Let the plugin infer globDirectory ("dist"); just give it patterns and caching.
       workbox: {
-        globDirectory: 'dist',
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
-        // Cache app shell & static assets
         runtimeCaching: [
           {
-            // same-origin navigation and static
             urlPattern: ({ url }) => url.origin === self.location.origin,
             handler: 'StaleWhileRevalidate',
             options: {
@@ -45,7 +43,6 @@ export default defineConfig({
             }
           },
           {
-            // images (including data URLs fetched via object URLs won’t be cached anyway)
             urlPattern: ({ request }) => request.destination === 'image',
             handler: 'CacheFirst',
             options: {
@@ -54,7 +51,6 @@ export default defineConfig({
             }
           },
           {
-            // fonts (if any are requested)
             urlPattern: ({ request }) => request.destination === 'font',
             handler: 'CacheFirst',
             options: {
@@ -63,13 +59,10 @@ export default defineConfig({
             }
           }
         ],
-        // make new SW take control immediately
         skipWaiting: true,
         clientsClaim: true
       },
-      devOptions: {
-        enabled: false // ensure CI build mirrors production service worker behavior
-      }
+      devOptions: { enabled: false }
     })
   ]
 })

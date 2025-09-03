@@ -1,11 +1,19 @@
+// Sortable grid, drag overlay, and tile rendering.
+// Keeps DnD logic local to the grid component.
+
 import React, { useMemo } from 'react'
 import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay,
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
 } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { OVERLAY_MODES } from '../constants'
-import { rgbToHex } from '../colorUtils'
+import { rgbToHex } from '../colorUtils' // <-- keep this import
 
 export default function Grid({
   items,
@@ -17,8 +25,8 @@ export default function Grid({
   overlayMode,
   overlayAlpha,
   onTileClick,
-  onAddClick,       // NEW: for empty-state button
-  onDropFiles,      // NEW: allow parent to pass drop handler
+  onAddClick,
+  onDropFiles,
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const ids = items.map((i) => i.id)
@@ -186,8 +194,4 @@ function DragPreview({ tile, showColor, mode, overlayMode, overlayAlpha }) {
       )}
     </div>
   )
-}
-
-function rgbToHex([r,g,b]) {
-  return '#' + [r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('')
 }
