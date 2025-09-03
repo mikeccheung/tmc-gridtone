@@ -12,7 +12,6 @@
     <title>GridTone PWA</title>
     <style>
       :root{
-        /* Faster motion (≈3× faster than previous): */
         --dur-fast: 90ms;
         --dur-med: 140ms;
         --dur-enter: 160ms;
@@ -43,7 +42,6 @@
         -webkit-font-smoothing: antialiased;
       }
 
-      /* Site Header */
       .site-header{
         position: sticky; top: 0; z-index: 30;
         display: grid; grid-template-columns: auto 1fr auto;
@@ -63,9 +61,7 @@
       .brand-text strong{ display:block; font-weight:600; letter-spacing:.2px; }
       .brand-text .tagline{ display:block; font-size:12px; opacity:.7; }
 
-      .primary-nav{
-        display: none;
-      }
+      .primary-nav{ display: none; }
       .primary-nav a{
         color: var(--text); text-decoration: none; opacity:.85; font-size: 14px;
         padding: 8px 10px; border-radius: 10px;
@@ -81,16 +77,12 @@
         cursor:pointer; transition: background var(--dur-fast) ease, transform var(--dur-fast) ease;
       }
       .hamburger:hover{ background:#222225; transform: translateY(-1px); }
-      .hamburger span{
-        width:18px; height:2px; background:#dcdce1; display:block; margin:2px 0;
-      }
+      .hamburger span{ width:18px; height:2px; background:#dcdce1; display:block; margin:2px 0; }
 
-      /* Reveal nav on wide screens; on small, use the hamburger dropdown */
       @media (min-width: 900px){
         .primary-nav{ display:flex; gap:8px; justify-content:flex-end; }
         .hamburger{ display:none; }
       }
-      /* Small-screen dropdown menu (slide down from header) */
       .primary-nav.open{
         position: absolute; top: 56px; left: 10px; right: 10px;
         display: grid; gap: 6px; padding: 10px;
@@ -103,7 +95,6 @@
         to   { opacity:1; transform: translateY(0); }
       }
 
-      /* Hero */
       .hero{
         padding: 36px 18px;
         border-bottom: 1px solid var(--stroke);
@@ -111,18 +102,11 @@
           radial-gradient(1200px 600px at 20% -20%, rgba(255,255,255,0.06), transparent),
           linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
       }
-      .hero-inner{
-        max-width: 980px; margin: 0 auto;
-      }
-      .hero h1{
-        margin: 0 0 10px 0; font-size: 28px; letter-spacing: .2px;
-      }
-      .hero p{
-        margin: 0 0 16px 0; opacity: .85; max-width: 58ch;
-      }
+      .hero-inner{ max-width: 980px; margin: 0 auto; }
+      .hero h1{ margin: 0 0 10px 0; font-size: 28px; letter-spacing: .2px; }
+      .hero p{ margin: 0 0 16px 0; opacity: .85; max-width: 58ch; }
       .hero-actions{ display:flex; gap: 10px; flex-wrap: wrap; }
 
-      /* Shell: main app + palette sidebar */
       .shell {
         display: grid;
         grid-template-columns: 1fr auto;
@@ -131,12 +115,11 @@
         margin: 14px auto 0;
         min-height: 60vh;
         box-shadow: 0 0 40px rgba(0,0,0,.35);
-        border-radius: var(--radius-xl);
+        border-radius: 24px;
         overflow: hidden;
         border: 1px solid var(--stroke);
       }
 
-      /* Main column */
       .page {
         max-width: 780px;
         width: 100%;
@@ -147,7 +130,6 @@
         background: linear-gradient(180deg, var(--bg-1), #141416);
       }
 
-      /* Toolbar */
       .toolbar {
         position: sticky; top: 0; z-index: 10;
         display: flex; flex-wrap: wrap; align-items: center;
@@ -157,17 +139,13 @@
         backdrop-filter: blur(12px);
         border-bottom: 1px solid var(--stroke);
       }
-      .toolbar-group {
-        display: flex; align-items: center; gap: .5rem;
-        flex: 1 1 100%;
-      }
+      .toolbar-group { display: flex; align-items: center; gap: .5rem; flex: 1 1 100%; }
       .toolbar-group--end { justify-content: flex-start; }
       @media (min-width: 720px) {
         .toolbar-group { flex: 0 0 auto; }
         .toolbar-group--end { margin-left: auto; }
       }
 
-      /* Buttons, inputs, toggles */
       .btn {
         background: linear-gradient(180deg, #1e1e20 0%, #151517 100%);
         border: 1px solid var(--stroke);
@@ -182,9 +160,7 @@
       .btn:hover { background: #262628; transform: translateY(-1px); }
       .btn:active { transform: translateY(0); }
       .btn:disabled { opacity:.5; cursor:default; transform:none; }
-      .btn-secondary{
-        background: #1b1b1d;
-      }
+      .btn-secondary{ background: #1b1b1d; }
 
       input[type="file"] { display:none; }
       label.btn { display:inline-flex; align-items:center; gap:.4rem; }
@@ -203,7 +179,6 @@
       .opacity-control label { font-size:13px; opacity:.8; }
       .opacity-control input[type="range"] { width: 120px; }
 
-      /* Grid */
       .grid {
         padding: 1rem;
         display: grid; gap: .6rem;
@@ -211,30 +186,33 @@
         flex: 1 1 auto;
       }
 
-      /* Tile card with fast entry animation */
+      /* Tile styles and animations */
       .tile {
         position: relative; aspect-ratio: 1/1;
-        border-radius: var(--radius-lg);
+        border-radius: 16px;
         overflow: hidden;
         background: var(--bg-1);
         box-shadow: inset 0 0 0 1px var(--stroke-soft), 0 2px 6px rgba(0,0,0,0.35);
         transition: transform var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+        cursor: grab;
+        will-change: transform;
       }
       .tile:hover {
         transform: translateY(-2px);
         box-shadow: inset 0 0 0 1px var(--stroke), 0 6px 12px rgba(0,0,0,0.45);
       }
       .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-      .tile-enter{
-        animation: fadeInUp var(--dur-enter) ease both;
+      .tile-enter{ animation: fadeInUp var(--dur-enter) ease both; }
+      .tile.dragging{
+        animation: none !important;
+        transition: none !important;
+        cursor: grabbing;
       }
       @keyframes fadeInUp{
         from { opacity: 0; transform: translateY(4px); }
         to   { opacity: 1; transform: translateY(0); }
       }
 
-      /* Dot swatch bar */
       .swatchBar {
         position: absolute; left: 8px; bottom: 8px;
         display: inline-flex; gap: 6px; align-items: center;
@@ -242,12 +220,8 @@
         padding: 4px 8px; border-radius: 999px;
         box-shadow: 0 2px 4px rgba(0,0,0,.4);
       }
-      .swatch {
-        width: 16px; height: 16px; border-radius: 999px;
-        border: 1px solid rgba(0,0,0,.25);
-      }
+      .swatch { width: 16px; height: 16px; border-radius: 999px; border: 1px solid rgba(0,0,0,.25); }
 
-      /* Overlays */
       .overlay-half, .overlay-full {
         position:absolute; left:0; width:100%;
         pointer-events:none;
@@ -255,7 +229,6 @@
       .overlay-half { bottom:0; height:50%; }
       .overlay-full { top:0; height:100%; }
 
-      /* Sidebar palette (slides in/out quickly) */
       .sidebar {
         width: 220px; padding: 1rem;
         background: rgba(20,20,22,.94);
@@ -288,7 +261,6 @@
         border-radius:999px; background:rgba(0,0,0,.45);
       }
 
-      /* Delete button */
       .tile .delete {
         position:absolute; top:8px; right:8px;
         width:28px; height:28px; border-radius:999px;
@@ -302,47 +274,35 @@
       }
       .tile .delete:hover { background:rgba(0,0,0,.75); }
 
-      /* Feature strip */
       .feature-strip{
         max-width:1100px; margin: 20px auto; padding: 0 18px;
-        display:grid; gap: 12px;
-        grid-template-columns: 1fr;
+        display:grid; gap: 12px; grid-template-columns: 1fr;
       }
-      @media (min-width: 900px){
-        .feature-strip{ grid-template-columns: repeat(3, 1fr); }
-      }
+      @media (min-width: 900px){ .feature-strip{ grid-template-columns: repeat(3, 1fr); } }
       .feature-card{
         background: linear-gradient(180deg, var(--bg-2), #111112);
         border: 1px solid var(--stroke);
-        border-radius: var(--radius-lg);
+        border-radius: 16px;
         padding: 16px;
         box-shadow: 0 8px 24px rgba(0,0,0,.25);
       }
       .feature-card h3{ margin: 0 0 6px 0; font-size: 16px; }
       .feature-card p{ margin: 0; opacity: .85; }
 
-      /* Footer */
       .site-footer{
         max-width:1100px; margin: 24px auto 36px; padding: 0 18px;
-        display:grid; gap: 18px;
-        grid-template-columns: 1fr;
+        display:grid; gap: 18px; grid-template-columns: 1fr;
       }
-      @media (min-width: 900px){
-        .site-footer{ grid-template-columns: 2fr 1fr; }
-      }
+      @media (min-width: 900px){ .site-footer{ grid-template-columns: 2fr 1fr; } }
       .howto{
         background: linear-gradient(180deg, var(--bg-2), #111112);
         border: 1px solid var(--stroke);
-        border-radius: var(--radius-lg);
+        border-radius: 16px;
         padding: 16px;
       }
       .howto h4{ margin: 0 0 8px 0; }
       .howto ol{ margin: 0; padding-left: 20px; opacity: .9; }
-      .legal{
-        display:flex; flex-direction: column; justify-content: center;
-        opacity: .75;
-        gap: 8px;
-      }
+      .legal{ display:flex; flex-direction: column; justify-content: center; opacity: .75; gap: 8px; }
     </style>
   </head>
   <body>

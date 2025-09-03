@@ -153,8 +153,6 @@ export default function App(){
     URL.revokeObjectURL(url)
   }, [items, columns, showColor, mode, overlayMode, overlayAlphaIdx])
 
-  const overlayAlpha = OVERLAY_ALPHAS[overlayAlphaIdx]
-
   // Close the mobile menu after any nav link is clicked.
   const handleNavClick = () => setNavOpen(false)
 
@@ -170,7 +168,6 @@ export default function App(){
           </div>
         </div>
 
-        {/* Removed "Palette" link from the nav to avoid anchor jumps when sidebar is hidden */}
         <nav className={`primary-nav ${navOpen ? 'open' : ''}`} aria-label="Primary" onClick={handleNavClick}>
           <a href="#features">Features</a>
           <a href="#howto">How it works</a>
@@ -277,11 +274,8 @@ export default function App(){
           </RemoveContext.Provider>
         </div>
 
-        {/* Palette Sidebar (kept mounted for smooth slide animation) */}
-        <aside
-          className={`sidebar ${showSidebar ? 'open' : ''}`}
-          aria-hidden={!showSidebar}
-        >
+        {/* Palette Sidebar */}
+        <aside className={`sidebar ${showSidebar ? 'open' : ''}`} aria-hidden={!showSidebar}>
           <div className="sidebarHeader">
             <strong>Palette</strong>
             <span style={{opacity:.6, fontSize:12}}>{mode === 'average' ? 'Average' : 'Dominant (3)'}</span>
@@ -345,6 +339,7 @@ export default function App(){
 
 /**
  * Sortable grid tile with animated entry and optional overlays.
+ * Note: While dragging, we disable the entry animation to avoid transform conflicts.
  */
 function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha }){
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
@@ -368,8 +363,11 @@ function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha }){
       ${seg(d[2]||d[1]||d[0])} 66.666%, ${seg(d[2]||d[1]||d[0])} 100%)`
   }, [item.dom, item.avg, overlayAlpha])
 
+  // Use 'dragging' class to disable the entry animation while dragging.
+  const tileClass = `tile ${isDragging ? 'dragging' : 'tile-enter'}`
+
   return (
-    <div ref={setNodeRef} className="tile tile-enter" style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} className={tileClass} style={style} {...attributes} {...listeners}>
       <img src={item.img.src} alt="" draggable={false}/>
 
       {showColor && overlayMode === OVERLAY_MODES.HALF && (
