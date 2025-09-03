@@ -16,12 +16,13 @@ import { exportGrid, exportGridObjectURL } from './exportUtils'
 import Modal from './Modal'
 
 /**
- * Constants and helpers.
+ * App constants and helpers.
  */
 const STORAGE_KEY = 'gridtone:v1'
 const RemoveContext = React.createContext(()=>{})
 const OVERLAY_MODES = { DOT:'dot', HALF:'half', FULL:'full' }
 const OVERLAY_ALPHAS = [0.15, 0.30, 0.50, 0.65, 0.85]
+const GRID_COLUMNS = 3
 
 function saveState(items){
   const lite = items.map(({id, img, avg, dom}) => ({ id, imgSrc: img?.src ?? '', avg, dom }))
@@ -38,6 +39,86 @@ function loadState(){
     })
   } catch {
     return []
+  }
+}
+
+/**
+ * Generate a single placeholder tile (canvas-based image with a colored background and label).
+ * Returns: { id, img, avg, dom }
+ */
+async function createPlaceholderTile({ rgb, label, size = 900 }) {
+  // Draw a solid color square with a subtle inner shadow and centered label
+  const cvs = document.createElement('canvas')
+  cvs.width = size; cvs.height = size
+  const ctx = cvs.getContext('2d')
+
+  // Background fill
+  ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`
+  ctx.fillRect(0, 0, size, size)
+
+  // Subtle inner vignette
+  const grad = ctx.createRadialGradient(size/2, size/2, size*0.2, size/2, size/2, size*0.8)
+  grad.addColorStop(0, 'rgba(0,0,0,0)')
+  grad.addColorStop(1, 'rgba(0,0,0,0.18)')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, size, size)
+
+  // Label (tile number)
+  ctx.fillStyle = 'rgba(255,255,255,0.95)'
+  ctx.font = `bold ${Math.floor(size*0.28)}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.shadowColor = 'rgba(0,0,0,0.25)'
+  ctx.shadowBlur = 12
+  ctx.fillText(String(label), size/2, size/2)
+
+  // Convert to JPEG data URL for consistency with imports
+  const dataURL = cvs.toDataURL('image/jpeg', 0.9)
+  const img = await dataURLToImage(dataURL)
+
+  // Compute palette using our existing utilities (accurate average/dominant)
+  const bmp = await createImageBitmap(img)
+  const avg = averageColorFromBitmap(bmp)
+  const dom = dominantColorsFromBitmap(bmp, 3)
+  bmp.close?.()
+
+  return { id: crypto.randomUUID(), img, avg, dom }
+}
+
+/**
+ * Create a 3×3 set of pleasant sample colors.
+ */
+function sampleColors9(){
+  return [
+    [248,111,98],
+    [255,176,59],
+    [255,218,121],
+    [119,195,206],
+    [90,171,123],
+    [162,103,230],
+    [88,119,243],
+    [243,99,175],
+    [109,204,130],
+  ]
+}
+
+/**
+ * Error boundary for unexpected runtime errors in this component tree.
+ */
+class ErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state = { hasError: false } }
+  static getDerivedStateFromError(){ return { hasError: true } }
+  componentDidCatch(err){ console.error('UI error caught:', err) }
+  render(){
+    if (this.state.hasError) {
+      return (
+        <div style={{padding:'1rem'}}>
+          <h3>Something went wrong</h3>
+          <p>Try reloading this page. If this persists, please report the steps to reproduce.</p>
+        </div>
+      )
+    }
+    return this.props.children
   }
 }
 
@@ -68,7 +149,7 @@ export default function App(){
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   /**
-   * Importer.
+   * Import files from user.
    */
   const onFiles = async (files) => {
     if (!files || !files.length) return
@@ -76,8 +157,8 @@ export default function App(){
 
     const appended = []
     let failed = 0
-
     const list = Array.from(files).sort((a,b)=>a.size-b.size)
+
     for (const file of list){
       try {
         if (!file.type.startsWith('image/')) continue
@@ -91,6 +172,7 @@ export default function App(){
 
         bmp.close?.()
         appended.push({ id: crypto.randomUUID(), img, avg, dom })
+        // Keep UI responsive on large batches.
         // eslint-disable-next-line no-await-in-loop
         await new Promise(r => setTimeout(r, 0))
       } catch (e) {
@@ -108,7 +190,7 @@ export default function App(){
   const onInputChange = (e)=> onFiles(e.target.files)
 
   const ids = items.map(i=>i.id)
-  const columns = 3
+  const columns = GRID_COLUMNS
 
   const handleDragStart = (event) => setActiveId(event.active?.id ?? null)
   const handleDragCancel = () => setActiveId(null)
@@ -122,7 +204,7 @@ export default function App(){
   }
 
   /**
-   * Export preview: generates a smaller composite and shows it in a modal.
+   * Export preview modal (object URL image).
    */
   const openPreview = useCallback(async () => {
     if (!items.length) return
@@ -134,7 +216,7 @@ export default function App(){
       includeOverlays: previewIncludeOverlays,
       showColor, mode, overlayMode,
       overlayAlpha: OVERLAY_ALPHAS[overlayAlphaIdx],
-      tileSize: 256,
+      tileSize: 256, // fast preview
       spacing: 12,
       background: '#0f0f10'
     })
@@ -152,9 +234,6 @@ export default function App(){
     }
   }, [previewUrl])
 
-  /**
-   * Final export at full resolution.
-   */
   const downloadExport = useCallback(async ()=>{
     if (!items.length) return
     const blob = await exportGrid({
@@ -180,8 +259,35 @@ export default function App(){
   const getItemById = (id) => items.find(t => t.id === id)
   const handleNavClick = () => setNavOpen(false)
 
+  /**
+   * Load a 3×3 sample grid of filler images. Confirm replacement if there are existing tiles.
+   */
+  const loadSampleGrid = useCallback(async ()=>{
+    if (items.length) {
+      const ok = window.confirm('Replace current grid with a 3×3 sample? This will discard your current arrangement.')
+      if (!ok) return
+    }
+    const colors = sampleColors9()
+    const tiles = []
+    for (let i=0;i<9;i++){
+      // eslint-disable-next-line no-await-in-loop
+      const t = await createPlaceholderTile({ rgb: colors[i], label: i+1, size: 900 })
+      tiles.push(t)
+    }
+    setItems(tiles)
+  }, [items.length])
+
+  /**
+   * Clear all tiles with confirmation.
+   */
+  const clearGrid = useCallback(()=>{
+    if (!items.length) return
+    const ok = window.confirm('Remove all images from the grid? This cannot be undone.')
+    if (ok) setItems([])
+  }, [items.length])
+
   return (
-    <>
+    <ErrorBoundary>
       {/* Site Header */}
       <header className="site-header">
         <div className="brand">
@@ -207,7 +313,7 @@ export default function App(){
       <section className="hero">
         <div className="hero-inner">
           <h1>Visualize your grid. Nail the tone.</h1>
-        <p>Drag, reorder, and color-check your posts with instant overlays and a palette that mirrors your layout. Install as a PWA and plan anywhere.</p>
+          <p>Drag, reorder, and color-check your posts with instant overlays and a palette that mirrors your layout. Install as a PWA and plan anywhere.</p>
           <div className="hero-actions">
             <label className="btn">
               <input ref={inputRef} type="file" accept="image/*" multiple onChange={onInputChange}/>
@@ -226,6 +332,8 @@ export default function App(){
           <div className="toolbar">
             <div className="toolbar-group">
               <button className="btn" onClick={openPreview} disabled={!items.length}>Preview Export</button>
+              <button className="btn btn-secondary" onClick={loadSampleGrid}>Load Sample 3×3</button>
+              <button className="btn btn-danger" onClick={clearGrid} disabled={!items.length}>Clear Grid</button>
             </div>
 
             <div className="toolbar-group">
@@ -366,7 +474,7 @@ export default function App(){
             <li>Tap “Add Images” or drag files onto the page.</li>
             <li>Drag to reorder. Toggle Color Map and choose Average or Dominant.</li>
             <li>Select overlay style (Dot / Half / Full) and adjust opacity.</li>
-            <li>Open the Palette to view a 3-column color map mirroring your layout.</li>
+            <li>Use Load Sample 3×3 for quick testing.</li>
             <li>Use Preview Export to confirm the collage, then Download JPG.</li>
           </ol>
         </div>
@@ -376,7 +484,7 @@ export default function App(){
         </div>
       </footer>
 
-      {/* Export Preview Modal (portal) */}
+      {/* Export Preview Modal */}
       <Modal open={previewOpen} onClose={closePreview} title="Export Preview">
         <div className="modal-header">
           <strong>Export Preview</strong>
@@ -406,12 +514,12 @@ export default function App(){
           )}
         </div>
       </Modal>
-    </>
+    </ErrorBoundary>
   )
 }
 
 /**
- * Sortable tile.
+ * Sortable grid tile.
  */
 function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha }){
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
@@ -471,7 +579,7 @@ function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha }){
 }
 
 /**
- * Drag overlay preview.
+ * Drag overlay preview (follows pointer).
  */
 function DragPreview({ tile, showColor, mode, overlayMode, overlayAlpha }){
   if (!tile) return null
@@ -509,7 +617,7 @@ function DragPreview({ tile, showColor, mode, overlayMode, overlayAlpha }){
 }
 
 /**
- * Utility.
+ * Utility: convert dataURL string into an HTMLImageElement.
  */
 function dataURLToImage(dataURL){
   return new Promise((resolve, reject)=>{
