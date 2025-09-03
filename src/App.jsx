@@ -12,10 +12,10 @@ import {
   bitmapToJpegDataURL,
   rgbToHex
 } from './colorUtils'
-import { exportGrid } from './exportUtils'
+import { exportGrid, exportGridObjectURL } from './exportUtils'
 
 /**
- * App-wide constants and helpers.
+ * Constants and helpers.
  */
 const STORAGE_KEY = 'gridtone:v1'
 const RemoveContext = React.createContext(()=>{})
@@ -41,7 +41,7 @@ function loadState(){
 }
 
 /**
- * ErrorBoundary prevents a total unmount on unexpected runtime errors.
+ * Error boundary.
  */
 class ErrorBoundary extends React.Component {
   constructor(props){ super(props); this.state = { hasError: false } }
@@ -61,20 +61,25 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function App(){
-  // Site-level UI
+  // Site UI
   const [navOpen, setNavOpen] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
 
-  // Feature state
+  // Grid state
   const [items, setItems] = useState(()=>loadState())
   const [showColor, setShowColor] = useState(true)
-  const [mode, setMode] = useState('average')             // 'average' | 'dominant'
+  const [mode, setMode] = useState('average')
   const [overlayMode, setOverlayMode] = useState(OVERLAY_MODES.DOT)
-  const [overlayAlphaIdx, setOverlayAlphaIdx] = useState(2) // default 50%
+  const [overlayAlphaIdx, setOverlayAlphaIdx] = useState(2)
   const [importing, setImporting] = useState(false)
 
-  // Drag overlay state
+  // Drag overlay
   const [activeId, setActiveId] = useState(null)
+
+  // Export preview modal
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewIncludeOverlays, setPreviewIncludeOverlays] = useState(false)
 
   const inputRef = useRef(null)
   React.useEffect(()=>{ saveState(items) }, [items])
@@ -82,7 +87,7 @@ export default function App(){
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   /**
-   * Robust image importer: sequential decode, single bitmap pass, per-file try/catch.
+   * Importer.
    */
   const onFiles = async (files) => {
     if (!files || !files.length) return
@@ -136,17 +141,50 @@ export default function App(){
   }
 
   /**
-   * Clean export (no overlays). This fixes “weird collage” by enforcing square center-crop.
-   * If you ever want an “Export with overlays”, pass includeOverlays: true below.
+   * Export preview: generates a smaller composite and shows it in a modal (<img src=objectURL>).
    */
-  const doExport = useCallback(async ()=>{
+  const openPreview = useCallback(async () => {
+    if (!items.length) return
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null) }
+
+    const url = await exportGridObjectURL({
+      tiles: items,
+      columns,
+      includeOverlays: previewIncludeOverlays,
+      showColor, mode, overlayMode,
+      overlayAlpha: OVERLAY_ALPHAS[overlayAlphaIdx],
+      tileSize: 256, // fast preview
+      spacing: 12,
+      background: '#0f0f10'
+    })
+    if (url) {
+      setPreviewUrl(url)
+      setPreviewOpen(true)
+    }
+  }, [items, columns, previewIncludeOverlays, showColor, mode, overlayMode, overlayAlphaIdx, previewUrl])
+
+  const closePreview = useCallback(() => {
+    setPreviewOpen(false)
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl)
+      setPreviewUrl(null)
+    }
+  }, [previewUrl])
+
+  /**
+   * Final export at full resolution.
+   */
+  const downloadExport = useCallback(async ()=>{
+    if (!items.length) return
     const blob = await exportGrid({
       tiles: items,
       columns,
-      includeOverlays: false,                 // clean export by default
-      showColor, mode, overlayMode,           // kept for future "with overlays"
+      includeOverlays: previewIncludeOverlays,
+      showColor, mode, overlayMode,
       overlayAlpha: OVERLAY_ALPHAS[overlayAlphaIdx],
-      tileSize: 512, spacing: 12, background: '#0f0f10'
+      tileSize: 512,
+      spacing: 12,
+      background: '#0f0f10'
     })
     if (!blob) return
     const url = URL.createObjectURL(blob)
@@ -155,16 +193,15 @@ export default function App(){
     a.download = 'gridtone_export.jpg'
     a.click()
     URL.revokeObjectURL(url)
-  }, [items, columns, showColor, mode, overlayMode, overlayAlphaIdx])
+  }, [items, columns, previewIncludeOverlays, showColor, mode, overlayMode, overlayAlphaIdx])
 
   const overlayAlpha = OVERLAY_ALPHAS[overlayAlphaIdx]
-
   const getItemById = (id) => items.find(t => t.id === id)
   const handleNavClick = () => setNavOpen(false)
 
   return (
     <ErrorBoundary>
-      {/* Site Header / Navigation */}
+      {/* Site Header */}
       <header className="site-header">
         <div className="brand">
           <div className="logo" aria-hidden="true"></div>
@@ -185,7 +222,7 @@ export default function App(){
         </button>
       </header>
 
-      {/* Hero Banner */}
+      {/* Hero */}
       <section className="hero">
         <div className="hero-inner">
           <h1>Visualize your grid. Nail the tone.</h1>
@@ -207,7 +244,7 @@ export default function App(){
           {/* Toolbar */}
           <div className="toolbar">
             <div className="toolbar-group">
-              <button className="btn" onClick={doExport} disabled={!items.length}>Export JPG</button>
+              <button className="btn" onClick={openPreview} disabled={!items.length}>Preview Export</button>
             </div>
 
             <div className="toolbar-group">
@@ -224,7 +261,7 @@ export default function App(){
               <select className="select" value={overlayMode} onChange={e=>setOverlayMode(e.target.value)} aria-label="Overlay mode">
                 <option value={OVERLAY_MODES.DOT}>Dot</option>
                 <option value={OVERLAY_MODES.HALF}>Half Overlay</option>
-                <option value={OVERLAY_MODES.FULL}>Full Overlay</option>
+                <option value={OVERLAY_MODESFULL}>Full Overlay</option>
               </select>
 
               <div className="opacity-control">
@@ -258,7 +295,7 @@ export default function App(){
             </div>
           </div>
 
-          {/* Image Grid + DragOverlay */}
+          {/* Grid + DragOverlay */}
           <RemoveContext.Provider value={(id)=>setItems(items=>items.filter(x=>x.id!==id))}>
             <DndContext
               sensors={sensors}
@@ -349,7 +386,7 @@ export default function App(){
             <li>Drag to reorder. Toggle Color Map and choose Average or Dominant.</li>
             <li>Select overlay style (Dot / Half / Full) and adjust opacity.</li>
             <li>Open the Palette to view a 3-column color map mirroring your layout.</li>
-            <li>Export a JPG of your current arrangement.</li>
+            <li>Use Preview Export to confirm the collage, then Download JPG.</li>
           </ol>
         </div>
         <div id="privacy" className="legal">
@@ -357,12 +394,39 @@ export default function App(){
           <p>© {new Date().getFullYear()} GridTone</p>
         </div>
       </footer>
+
+      {/* Export Preview Modal */}
+      {previewOpen && (
+        <div className="modal-backdrop" onClick={closePreview}>
+          <div className="modal" onClick={(e)=>e.stopPropagation()}>
+            <div className="modal-header">
+              <strong>Export Preview</strong>
+              <button className="modal-close" onClick={closePreview}>×</button>
+            </div>
+            <div className="modal-controls">
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={previewIncludeOverlays}
+                  onChange={(e)=>setPreviewIncludeOverlays(e.target.checked)}
+                />
+                <span>Include overlays (use current Color Map/Mode/Opacity)</span>
+              </label>
+              <button className="btn" onClick={openPreview}>Refresh Preview</button>
+              <button className="btn" onClick={downloadExport}>Download JPG</button>
+            </div>
+            <div className="modal-body">
+              {previewUrl ? <img src={previewUrl} alt="Export preview" style={{maxWidth:'100%', height:'auto', display:'block', margin:'0 auto', borderRadius:12}}/> : <div>Generating…</div>}
+            </div>
+          </div>
+        </div>
+      )}
     </ErrorBoundary>
   )
 }
 
 /**
- * Sortable grid tile
+ * Sortable tile.
  */
 function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha }){
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
@@ -422,7 +486,7 @@ function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha }){
 }
 
 /**
- * Drag preview for the overlay that follows the cursor.
+ * Drag overlay preview.
  */
 function DragPreview({ tile, showColor, mode, overlayMode, overlayAlpha }){
   if (!tile) return null
@@ -460,7 +524,7 @@ function DragPreview({ tile, showColor, mode, overlayMode, overlayAlpha }){
 }
 
 /**
- * Utility: convert dataURL string into an HTMLImageElement.
+ * Utility.
  */
 function dataURLToImage(dataURL){
   return new Promise((resolve, reject)=>{

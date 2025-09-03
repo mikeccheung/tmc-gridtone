@@ -1,34 +1,29 @@
 /**
  * Export the current grid as a composite JPG.
- * Goals:
- *  - Consistent, square tiles (center-cropped), 3-across by default.
- *  - Clean export by default (no overlays).
- *  - Optional overlays supported via includeOverlays flag.
+ * - Square tiles with center-crop.
+ * - No overlap (tiles are drawn into a clipped rect).
+ * - Optional overlays (dot / half / full) when includeOverlays = true.
  */
 
 export async function exportGrid({
   tiles,
   columns = 3,
-  includeOverlays = false,   // default: clean export
-  // Overlay-related inputs (used only if includeOverlays = true)
+  includeOverlays = false,
   showColor = false,
   mode = 'average',          // 'average' | 'dominant'
   overlayMode = 'dot',       // 'dot' | 'half' | 'full'
   overlayAlpha = 0.5,
-
-  // Rendering settings
-  tileSize = 512,            // square export tile size
+  tileSize = 512,
   spacing = 12,
   background = '#0f0f10',
-  border = 'rgba(255,255,255,0.06)', // subtle tile stroke
-  pixelRatio = Math.min(2, (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1))
+  border = 'rgba(255,255,255,0.06)',
+  pixelRatio = Math.min(2, (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)),
 }) {
   if (!tiles || !tiles.length) return null
 
   const cols = Math.max(1, columns)
   const rows = Math.ceil(tiles.length / cols)
 
-  // Calculate canvas dimensions (scaled for devicePixelRatio for crisp output)
   const w = cols * tileSize + (cols - 1) * spacing
   const h = rows * tileSize + (rows - 1) * spacing
 
@@ -42,7 +37,6 @@ export async function exportGrid({
   ctx.fillStyle = background
   ctx.fillRect(0, 0, w, h)
 
-  // Draw every tile in order
   for (let i = 0; i < tiles.length; i++) {
     const t = tiles[i]
     const row = Math.floor(i / cols)
@@ -50,50 +44,68 @@ export async function exportGrid({
     const x = col * (tileSize + spacing)
     const y = row * (tileSize + spacing)
 
-    await drawAspectFill(ctx, t.img, x, y, tileSize, tileSize)
+    // Draw into a clipped square to avoid any spill/overlap
+    await drawAspectFillClipped(ctx, t.img, x, y, tileSize, tileSize)
 
-    // Subtle border to match app cards
+    // Subtle tile stroke (optional)
     if (border) {
       ctx.strokeStyle = border
       ctx.lineWidth = 1
       ctx.strokeRect(x + 0.5, y + 0.5, tileSize - 1, tileSize - 1)
     }
 
-    // Optional overlays (only if requested)
+    // Overlays (only if explicitly requested)
     if (includeOverlays && showColor) {
       if (overlayMode === 'dot') {
         const colors = (mode === 'average') ? [t.avg] : (t.dom?.length ? t.dom : [t.avg])
         drawSwatches(ctx, colors, x, y, tileSize, tileSize)
       } else {
         if (mode === 'average') {
+          ctx.save()
+          ctx.beginPath(); ctx.rect(x, y, tileSize, tileSize); ctx.clip()
           ctx.fillStyle = rgbaStr(t.avg, overlayAlpha)
-          if (overlayMode === 'half') ctx.fillRect(x, y + tileSize / 2, tileSize, tileSize / 2)
-          else ctx.fillRect(x, y, tileSize, tileSize) // full
+          if (overlayMode === 'half') {
+            ctx.fillRect(x, y + tileSize / 2, tileSize, tileSize / 2)
+          } else {
+            ctx.fillRect(x, y, tileSize, tileSize)
+          }
+          ctx.restore()
         } else {
-          // Dominant(3): three stripes, top→bottom
           const dom = t.dom && t.dom.length ? t.dom : [t.avg, t.avg, t.avg]
           const hOverlay = overlayMode === 'half' ? tileSize / 2 : tileSize
           const y0 = overlayMode === 'half' ? y + tileSize / 2 : y
           const stripeH = hOverlay / 3
+          ctx.save()
+          ctx.beginPath(); ctx.rect(x, y, tileSize, tileSize); ctx.clip()
           for (let s = 0; s < 3; s++) {
             ctx.fillStyle = rgbaStr(dom[s] || t.avg, overlayAlpha)
             ctx.fillRect(x, y0 + s * stripeH, tileSize, stripeH)
           }
+          ctx.restore()
         }
       }
     }
   }
 
-  // Blob export
   return await new Promise((resolve) =>
     canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92)
   )
 }
 
 /**
- * Draw an image to fill a target rect (center-crop, like CSS object-fit: cover).
+ * Same as exportGrid but returns an Object URL suitable for <img src="..."> preview.
+ * Caller must revokeObjectURL(url) when done.
  */
-async function drawAspectFill(ctx, img, x, y, w, h) {
+export async function exportGridObjectURL(opts) {
+  const blob = await exportGrid(opts)
+  if (!blob) return null
+  return URL.createObjectURL(blob)
+}
+
+/**
+ * Draw an image to fill a target rect (center-crop) while clipped to the rect.
+ */
+async function drawAspectFillClipped(ctx, img, x, y, w, h) {
   const iw = img.naturalWidth || img.width
   const ih = img.naturalHeight || img.height
   if (!iw || !ih) return
@@ -104,7 +116,10 @@ async function drawAspectFill(ctx, img, x, y, w, h) {
   const dx = x + (w - dw) / 2
   const dy = y + (h - dh) / 2
 
+  ctx.save()
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip()
   ctx.drawImage(img, dx, dy, dw, dh)
+  ctx.restore()
 }
 
 /**
@@ -116,12 +131,10 @@ function drawSwatches(ctx, colors, x, y, w, h) {
   const bx = x + pad - 6, by = y + h - pad - circle - 4
   const bw = total + 12, bh = circle + 8
 
-  // capsule background
   ctx.fillStyle = 'rgba(0,0,0,.35)'
   roundRect(ctx, bx, by, bw, bh, (circle + 8) / 2)
   ctx.fill()
 
-  // swatches
   for (let i = 0; i < colors.length; i++) {
     const [r, g, b] = colors[i]
     const cx = x + pad + i * (circle + gap)
