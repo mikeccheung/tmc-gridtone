@@ -62,8 +62,8 @@ class ErrorBoundary extends React.Component {
 
 export default function App(){
   // Site-level UI
-  const [navOpen, setNavOpen] = useState(false)       // hamburger menu
-  const [showSidebar, setShowSidebar] = useState(false) // palette drawer
+  const [navOpen, setNavOpen] = useState(false)          // hamburger menu
+  const [showSidebar, setShowSidebar] = useState(false)  // palette drawer
 
   // Feature state
   const [items, setItems] = useState(()=>loadState())
@@ -155,6 +155,9 @@ export default function App(){
 
   const overlayAlpha = OVERLAY_ALPHAS[overlayAlphaIdx]
 
+  // Close the mobile menu after any nav link is clicked.
+  const handleNavClick = () => setNavOpen(false)
+
   return (
     <ErrorBoundary>
       {/* Site Header / Navigation */}
@@ -167,9 +170,9 @@ export default function App(){
           </div>
         </div>
 
-        <nav className={`primary-nav ${navOpen ? 'open' : ''}`} aria-label="Primary">
+        {/* Removed "Palette" link from the nav to avoid anchor jumps when sidebar is hidden */}
+        <nav className={`primary-nav ${navOpen ? 'open' : ''}`} aria-label="Primary" onClick={handleNavClick}>
           <a href="#features">Features</a>
-          <a href="#palette">Palette</a>
           <a href="#howto">How it works</a>
           <a href="#privacy">Privacy</a>
         </nav>
@@ -265,7 +268,7 @@ export default function App(){
                       showColor={showColor}
                       mode={mode}
                       overlayMode={overlayMode}
-                      overlayAlpha={overlayAlpha}
+                      overlayAlpha={OVERLAY_ALPHAS[overlayAlphaIdx]}
                     />
                   ))}
                 </div>
@@ -276,7 +279,6 @@ export default function App(){
 
         {/* Palette Sidebar (kept mounted for smooth slide animation) */}
         <aside
-          id="palette"
           className={`sidebar ${showSidebar ? 'open' : ''}`}
           aria-hidden={!showSidebar}
         >
