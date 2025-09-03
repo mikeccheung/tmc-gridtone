@@ -9,14 +9,16 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write   # required for OIDC
+      id-token: write   # OIDC
       contents: read
 
     env:
       AWS_REGION: ${{ vars.AWS_REGION || secrets.AWS_REGION }}
       S3_BUCKET: ${{ vars.S3_BUCKET || secrets.S3_BUCKET }}
+      # keep your existing CF_DISTRIBUTION_ID if you like, but we won't rely on it
       CF_DISTRIBUTION_ID: ${{ vars.CF_DISTRIBUTION_ID || secrets.CF_DISTRIBUTION_ID }}
       AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN || secrets.AWS_ROLE_ARN }}
+      GRIDTONE_ALIAS: gridtone.tmikec.com
 
     steps:
       - uses: actions/checkout@v4
@@ -44,8 +46,18 @@ jobs:
             --cache-control max-age=0,no-cache,no-store,must-revalidate \
             --content-type text/html
 
-      - name: Verify distribution ID exists
-        run: aws cloudfront get-distribution --id $CF_DISTRIBUTION_ID
+      - name: Resolve CloudFront ID by alias
+        id: resolve_cf
+        run: |
+          CF_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Aliases.Items && contains(join(',',Aliases.Items), '${GRIDTONE_ALIAS}')].Id | [0]" \
+            --output text)
+          if [ -z "$CF_ID" ] || [ "$CF_ID" = "None" ]; then
+            echo "Failed to resolve CloudFront distribution for alias ${GRIDTONE_ALIAS}"
+            exit 1
+          fi
+          echo "Resolved CF_ID=$CF_ID"
+          echo "CF_ID=$CF_ID" >> $GITHUB_ENV
 
       - name: Invalidate CloudFront
-        run: aws cloudfront create-invalidation --distribution-id $CF_DISTRIBUTION_ID --paths "/*"
+        run: aws cloudfront create-invalidation --distribution-id "$CF_ID" --paths "/*"
