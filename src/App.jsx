@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { OVERLAY_MODES, OVERLAY_ALPHAS, GRID_COLUMNS } from './constants'
 import { saveTiles, loadTiles } from './state/storage'
 import { useImageImporter } from './hooks/useImageImporter'
-import { exportGrid, exportGridObjectURL } from './exportUtils'
+import { exportGrid, exportGridObjectURL, ensureImagesDecoded } from './exportUtils'
 import Modal from './Modal'
 import Grid from './components/Grid'
 import Toolbar from './components/Toolbar'
@@ -18,18 +18,15 @@ export default function App() {
   useEffect(() => { (async () => setItems(await loadTiles()))() }, [])
   const [activeId, setActiveId] = useState(null)
 
-  // Global overlay controls
   const [showColor, setShowColor] = useState(true)
   const [mode, setMode] = useState('average')
   const [overlayMode, setOverlayMode] = useState(OVERLAY_MODES.DOT)
   const [overlayAlphaIdx, setOverlayAlphaIdx] = useState(2)
 
-  // Export preview
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewIncludeOverlays, setPreviewIncludeOverlays] = useState(false)
 
-  // NEW: Image viewer modal
   const [viewerOpen, setViewerOpen] = useState(false)
   const [viewerIndex, setViewerIndex] = useState(0)
 
@@ -48,10 +45,13 @@ export default function App() {
   const columns = GRID_COLUMNS
   const overlayAlpha = OVERLAY_ALPHAS[overlayAlphaIdx]
 
-  // Export preview generation (unchanged behavior)
+  // Export preview generation — now decodes images first
   const generatePreview = useCallback(async () => {
     if (!previewOpen || !items.length) return
     if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null) }
+
+    await ensureImagesDecoded(items)
+
     const url = await exportGridObjectURL({
       tiles: items,
       columns,
@@ -62,6 +62,7 @@ export default function App() {
     })
     if (url) setPreviewUrl(url)
   }, [previewOpen, items, columns, previewIncludeOverlays, showColor, mode, overlayMode, overlayAlpha, previewUrl])
+
   const openPreview = useCallback(() => { if (items.length) setPreviewOpen(true) }, [items.length])
   useEffect(() => { generatePreview() }, [generatePreview])
   const closePreview = useCallback(() => {
@@ -71,6 +72,7 @@ export default function App() {
 
   const downloadExport = useCallback(async () => {
     if (!items.length) return
+    await ensureImagesDecoded(items)
     const blob = await exportGrid({
       tiles: items, columns,
       includeOverlays: previewIncludeOverlays,
@@ -106,17 +108,17 @@ export default function App() {
     if (ok) setItems([])
   }, [items.length])
 
-  // Open viewer on tile click
+  // Viewer wiring (open only if index is valid)
   const handleTileClick = useCallback((idx) => {
-    setViewerIndex(idx)
-    setViewerOpen(true)
-  }, [])
+    if (idx >= 0 && idx < items.length) {
+      setViewerIndex(idx)
+      setViewerOpen(true)
+    }
+  }, [items.length])
 
-  // Delete from viewer
   const deleteFromViewer = useCallback((idx) => {
     setItems((arr) => {
       const next = arr.slice(0, idx).concat(arr.slice(idx + 1))
-      // Adjust viewer index after deletion
       if (next.length === 0) {
         setViewerOpen(false)
       } else if (idx >= next.length) {
@@ -189,7 +191,9 @@ export default function App() {
             mode={mode}
             overlayMode={overlayMode}
             overlayAlpha={overlayAlpha}
-            onTileClick={handleTileClick} // NEW
+            onTileClick={handleTileClick}
+            onAddClick={() => inputRef.current?.click()}    // for empty-state button
+            onDropFiles={(files)=>onFiles(files)}           // for empty-state drop
           />
         </div>
 
@@ -242,9 +246,9 @@ export default function App() {
         </div>
       </Modal>
 
-      {/* NEW: Image Viewer Modal */}
+      {/* Viewer */}
       <ImageViewerModal
-        open={viewerOpen}
+        open={viewerOpen && !!items[viewerIndex]}   // only open if valid
         onClose={()=>setViewerOpen(false)}
         items={items}
         index={viewerIndex}

@@ -1,11 +1,6 @@
 import React, { useMemo } from 'react'
 import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragOverlay,
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay,
 } from '@dnd-kit/core'
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -21,7 +16,9 @@ export default function Grid({
   mode,
   overlayMode,
   overlayAlpha,
-  onTileClick, // NEW
+  onTileClick,
+  onAddClick,       // NEW: for empty-state button
+  onDropFiles,      // NEW: allow parent to pass drop handler
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const ids = items.map((i) => i.id)
@@ -36,8 +33,27 @@ export default function Grid({
     const newIndex = items.findIndex((i) => i.id === over.id)
     setItems(arrayMove(items, oldIndex, newIndex))
   }
-
   const getItemById = (id) => items.find((t) => t.id === id)
+
+  // Empty state dropzone
+  if (!items.length) {
+    return (
+      <div
+        className="empty-dropzone"
+        onDragOver={(e)=>e.preventDefault()}
+        onDrop={(e)=>{ e.preventDefault(); onDropFiles?.(e.dataTransfer.files) }}
+        role="region"
+        aria-label="Drop images here"
+      >
+        <div className="empty-inner">
+          <div className="empty-hero">＋</div>
+          <div className="empty-title">Add images to start planning</div>
+          <div className="empty-sub">Drag & drop images here, or</div>
+          <button className="btn" onClick={onAddClick}>Browse…</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <DndContext
@@ -60,7 +76,7 @@ export default function Grid({
               overlayMode={overlayMode}
               overlayAlpha={overlayAlpha}
               onRemove={(id) => setItems((arr) => arr.filter((x) => x.id !== id))}
-              onClick={() => onTileClick?.(idx)} // NEW
+              onClick={() => onTileClick?.(idx)}
             />
           ))}
         </div>
@@ -130,11 +146,6 @@ function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha, on
           {swatches.map((rgb, i) => (
             <div key={i} className="swatch" style={{ background: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` }} title={rgbToHex(rgb)} />
           ))}
-          {mode === 'average' && (
-            <div style={{ fontSize: 10, opacity: 0.9, padding: '2px 6px', borderRadius: 999, background: 'rgba(0,0,0,.25)' }}>
-              {rgbToHex(swatches[0])}
-            </div>
-          )}
         </div>
       )}
 
@@ -175,4 +186,8 @@ function DragPreview({ tile, showColor, mode, overlayMode, overlayAlpha }) {
       )}
     </div>
   )
+}
+
+function rgbToHex([r,g,b]) {
+  return '#' + [r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('')
 }

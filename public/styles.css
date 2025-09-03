@@ -344,3 +344,17 @@ img { display: block; max-width: 100%; height: auto; }
   border: 1px solid rgba(255,255,255,.12);
 }
 .viewer-dot { width: 20px; height: 20px; border-radius: 999px; border: 1px solid rgba(0,0,0,.25); }
+
+/* Empty-state dropzone */
+.empty-dropzone {
+  display: grid; place-items: center;
+  width: 100%;
+  aspect-ratio: 3 / 1; /* roomy area */
+  border: 2px dashed var(--border);
+  border-radius: var(--card-radius);
+  background: linear-gradient(180deg, #161618, #0f0f10);
+}
+.empty-inner { text-align: center; padding: 18px; color: var(--muted); }
+.empty-hero { font-size: 40px; line-height: 1; opacity: .85; margin-bottom: 6px; }
+.empty-title { font-weight: 600; color: var(--text); margin-bottom: 2px; }
+.empty-sub { margin-bottom: 10px; }

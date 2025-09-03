@@ -1,12 +1,7 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useCallback, useEffect, useMemo } from 'react'
 import Modal from '../Modal'
 import { OVERLAY_MODES } from '../constants'
 
-/**
- * ImageViewerModal
- * - Displays the active image large with overlay preview
- * - Offers navigation (prev/next), delete, and overlay controls
- */
 export default function ImageViewerModal({
   open,
   onClose,
@@ -14,8 +9,6 @@ export default function ImageViewerModal({
   index,
   setIndex,
   onDeleteCurrent,
-
-  // Overlay controls (global so the grid matches what the user sees here)
   showColor, setShowColor,
   mode, setMode,
   overlayMode, setOverlayMode,
@@ -23,25 +16,12 @@ export default function ImageViewerModal({
   overlayAlphas
 }) {
   const tile = items[index] || null
-  const imgRef = useRef(null)
-
-  // Keyboard navigation + close
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e) => {
-      if (e.key === 'Escape') onClose?.()
-      if (e.key === 'ArrowLeft') prev()
-      if (e.key === 'ArrowRight') next()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, index, items.length])
-
-  if (!open || !tile) return null
+  if (!open || !tile) return null // hard guard against out-of-range
 
   const overlayAlpha = overlayAlphas[overlayAlphaIdx]
-  const swatches = mode === 'average' ? [tile.avg] : (tile.dom?.length ? tile.dom : [tile.avg, tile.avg, tile.avg])
+  const swatches = mode === 'average'
+    ? [tile.avg]
+    : (tile.dom?.length ? tile.dom : [tile.avg, tile.avg, tile.avg])
   const tint = (mode === 'average' ? tile.avg : (tile.dom?.[0] || tile.avg))
 
   const dominantGradient = useMemo(()=>{
@@ -53,12 +33,21 @@ export default function ImageViewerModal({
       ${seg(d[2]||d[1]||d[0])} 66.666%, ${seg(d[2]||d[1]||d[0])} 100%)`
   }, [tile.dom, tile.avg, overlayAlpha])
 
-  const prev = () => setIndex((i)=> (i > 0 ? i - 1 : i))
-  const next = () => setIndex((i)=> (i < items.length - 1 ? i + 1 : i))
+  const prev = useCallback(() => setIndex(i => (i > 0 ? i - 1 : i)), [setIndex])
+  const next = useCallback(() => setIndex(i => (i < items.length - 1 ? i + 1 : i)), [setIndex, items.length])
+  const handleDelete = useCallback(() => onDeleteCurrent(index), [onDeleteCurrent, index])
 
-  const handleDelete = () => {
-    onDeleteCurrent(index)
-  }
+  // Keyboard navigation + close
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose?.()
+      else if (e.key === 'ArrowLeft') prev()
+      else if (e.key === 'ArrowRight') next()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose, prev, next])
 
   return (
     <Modal open={open} onClose={onClose} title="Image Viewer">
@@ -115,7 +104,7 @@ export default function ImageViewerModal({
 
       <div className="modal-body modal-body--viewer">
         <div className="viewer-stage">
-          <img ref={imgRef} src={tile.img.src} alt="" className="viewer-img" />
+          <img src={tile.img.src} alt="" className="viewer-img" />
           {showColor && overlayMode === OVERLAY_MODES.HALF && (
             mode === 'average'
               ? <div className="viewer-overlay viewer-overlay--half" style={{ background: `rgba(${tint[0]},${tint[1]},${tint[2]},${overlayAlpha})` }} />

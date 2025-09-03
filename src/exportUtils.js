@@ -16,6 +16,9 @@ export async function exportGrid({
 }) {
   if (!tiles || !tiles.length) return null
 
+  // NEW: ensure all images are decoded before drawing
+  await ensureImagesDecoded(tiles)
+
   const cols = Math.max(1, columns)
   const rows = Math.ceil(tiles.length / cols)
   const w = cols * tileSize + (cols - 1) * spacing
@@ -85,6 +88,8 @@ export async function exportGridObjectURL(opts) {
   return URL.createObjectURL(blob)
 }
 
+/* ----------------- helpers ----------------- */
+
 async function drawAspectFillClipped(ctx, img, x, y, w, h) {
   const iw = img.naturalWidth || img.width
   const ih = img.naturalHeight || img.height
@@ -138,4 +143,22 @@ function roundRect(ctx, x, y, w, h, r) {
 function rgbaStr(rgb, alpha) {
   const [r, g, b] = rgb || [0, 0, 0]
   return `rgba(${r},${g},${b},${alpha})`
+}
+
+// NEW: Wait until every tile image is decoded (prevents blank previews)
+export async function ensureImagesDecoded(tiles) {
+  const tasks = tiles.map(t => {
+    const img = t.img
+    if (!img) return Promise.resolve()
+    if ('decode' in img && typeof img.decode === 'function') {
+      return img.decode().catch(() => {}) // ignore decode errors (Safari quirks)
+    }
+    // Fallback for older browsers
+    if (img.complete) return Promise.resolve()
+    return new Promise(res => {
+      img.onload = () => res()
+      img.onerror = () => res()
+    })
+  })
+  await Promise.all(tasks)
 }
