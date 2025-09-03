@@ -1,27 +1,18 @@
+// Accessible modal rendered via a portal into document.body.
+
 import React, { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
-/**
- * Accessible modal rendered via a portal into document.body.
- * - Centers content with a backdrop.
- * - Focus-lock lite: moves focus into the modal on open and returns it on close.
- * - Closes on ESC and backdrop click.
- */
 export default function Modal({ open, onClose, title = 'Dialog', children }) {
   const contentRef = useRef(null)
   const lastFocusedRef = useRef(null)
 
   useEffect(() => {
     if (!open) return
-
-    // Save last focused element to restore on close
     lastFocusedRef.current = document.activeElement
-
-    // Prevent body scroll
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
 
-    // Move focus into the modal
     const t = setTimeout(() => {
       const node = contentRef.current
       if (!node) return
@@ -31,7 +22,6 @@ export default function Modal({ open, onClose, title = 'Dialog', children }) {
       ;(firstFocusable || node).focus()
     }, 0)
 
-    // ESC to close
     const onKey = (e) => { if (e.key === 'Escape') onClose?.() }
     window.addEventListener('keydown', onKey)
 
@@ -45,7 +35,6 @@ export default function Modal({ open, onClose, title = 'Dialog', children }) {
     }
   }, [open, onClose])
 
-  // Backdrop click (only when clicking outside the modal content)
   const handleBackdropMouseDown = (e) => {
     if (!contentRef.current) return
     if (!contentRef.current.contains(e.target)) onClose?.()
@@ -54,11 +43,7 @@ export default function Modal({ open, onClose, title = 'Dialog', children }) {
   if (!open) return null
 
   return createPortal(
-    <div
-      className="modal-backdrop"
-      role="presentation"
-      onMouseDown={handleBackdropMouseDown}
-    >
+    <div className="modal-backdrop" role="presentation" onMouseDown={handleBackdropMouseDown}>
       <div
         className="modal"
         role="dialog"
@@ -66,7 +51,7 @@ export default function Modal({ open, onClose, title = 'Dialog', children }) {
         aria-label={title}
         ref={contentRef}
         tabIndex={-1}
-        onMouseDown={(e)=>e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         {children}
       </div>
