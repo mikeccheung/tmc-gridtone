@@ -1,7 +1,6 @@
-export async function imageToBitmap(file) {
-  const img = await createImageBitmap(file)
-  return img
-}
+/**
+ * Color utilities: average and dominant colors from a bitmap.
+ */
 
 export function averageColorFromBitmap(bitmap, max = 96) {
   const { ctx, scaledW, scaledH } = drawBitmap(bitmap, max)
@@ -12,6 +11,10 @@ export function averageColorFromBitmap(bitmap, max = 96) {
   return [r,g,b]
 }
 
+/**
+ * K-means to find up to k dominant colors.
+ * Returns colors sorted by cluster size descending.
+ */
 export function dominantColorsFromBitmap(bitmap, k=3, samples=4000, max=96, iters=8) {
   const { ctx, scaledW, scaledH } = drawBitmap(bitmap, max)
   const { data } = ctx.getImageData(0,0,scaledW,scaledH)
@@ -25,10 +28,12 @@ export function dominantColorsFromBitmap(bitmap, k=3, samples=4000, max=96, iter
   }
   if (!pts.length) return []
 
+  // Initialize centers with first k samples.
   let centers = pts.slice(0,k).map(p=>p.slice())
 
+  // Lloyd's iterations.
   for (let iter=0; iter<iters; iter++) {
-    const sums = Array.from({length:k},()=>[0,0,0,0])
+    const sums = Array.from({length:k},()=>[0,0,0,0]) // r,g,b,count
     for (const p of pts) {
       const j = nearest(centers, p)
       sums[j][0]+=p[0]; sums[j][1]+=p[1]; sums[j][2]+=p[2]; sums[j][3]++
@@ -42,6 +47,7 @@ export function dominantColorsFromBitmap(bitmap, k=3, samples=4000, max=96, iter
     }
   }
 
+  // Final assignment for cluster sizes, sort by size desc.
   const counts = Array(k).fill(0)
   for (const p of pts) counts[nearest(centers, p)]++
 
@@ -52,6 +58,26 @@ export function dominantColorsFromBitmap(bitmap, k=3, samples=4000, max=96, iter
     .slice(0,k)
     .map(x=>x.c)
 }
+
+/**
+ * Create a downscaled JPEG data URL from a bitmap for persistence.
+ * This avoids re-decoding the original file repeatedly.
+ */
+export function bitmapToJpegDataURL(bitmap, maxDim = 1600, quality = 0.9){
+  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height))
+  const w = Math.max(1, Math.round(bitmap.width * scale))
+  const h = Math.max(1, Math.round(bitmap.height * scale))
+  const canvas = new OffscreenCanvas(w, h)
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(bitmap, 0, 0, w, h)
+  return canvas.convertToBlob
+    ? canvas.convertToBlob({ type: 'image/jpeg', quality }).then(blobToDataURL)
+    : Promise.resolve(canvasToDataURL(canvas, quality))
+}
+
+/**
+ * Helpers.
+ */
 
 function nearest(centers, p){
   let bi=0, bd=Infinity
@@ -76,4 +102,17 @@ function drawBitmap(bitmap, max){
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.drawImage(bitmap, 0, 0, scaledW, scaledH)
   return { ctx, scaledW, scaledH }
+}
+
+function blobToDataURL(blob){
+  return new Promise((resolve, reject)=>{
+    const fr = new FileReader()
+    fr.onload = ()=>resolve(fr.result)
+    fr.onerror = reject
+    fr.readAsDataURL(blob)
+  })
+}
+
+function canvasToDataURL(canvas, q){
+  return canvas.toDataURL('image/jpeg', q)
 }
