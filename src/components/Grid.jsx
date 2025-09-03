@@ -1,6 +1,3 @@
-// Sortable grid, drag overlay, and tile rendering.
-// Keeps DnD logic local to the grid component.
-
 import React, { useMemo } from 'react'
 import {
   DndContext,
@@ -10,7 +7,6 @@ import {
   useSensors,
   DragOverlay,
 } from '@dnd-kit/core'
-  // eslint-disable-next-line import/no-extraneous-dependencies
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { OVERLAY_MODES } from '../constants'
@@ -25,6 +21,7 @@ export default function Grid({
   mode,
   overlayMode,
   overlayAlpha,
+  onTileClick, // NEW
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const ids = items.map((i) => i.id)
@@ -52,16 +49,18 @@ export default function Grid({
     >
       <SortableContext items={ids} strategy={rectSortingStrategy}>
         <div className="grid">
-          {items.map((it) => (
+          {items.map((it, idx) => (
             <SortableTile
               key={it.id}
               id={it.id}
               item={it}
+              index={idx}
               showColor={showColor}
               mode={mode}
               overlayMode={overlayMode}
               overlayAlpha={overlayAlpha}
               onRemove={(id) => setItems((arr) => arr.filter((x) => x.id !== id))}
+              onClick={() => onTileClick?.(idx)} // NEW
             />
           ))}
         </div>
@@ -82,7 +81,7 @@ export default function Grid({
   )
 }
 
-function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha, onRemove }) {
+function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha, onRemove, onClick }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -105,7 +104,14 @@ function SortableTile({ id, item, showColor, mode, overlayMode, overlayAlpha, on
   const tileClass = `tile tile-enter${isDragging ? ' dragging' : ''}`
 
   return (
-    <div ref={setNodeRef} className={tileClass} style={style} {...attributes} {...listeners}>
+    <div
+      ref={setNodeRef}
+      className={tileClass}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={(e)=>{ e.stopPropagation(); onClick?.() }}
+    >
       <img src={item.img.src} alt="" draggable={false} />
 
       {showColor && overlayMode === OVERLAY_MODES.HALF && (

@@ -301,3 +301,46 @@ img { display: block; max-width: 100%; height: auto; }
 }
 .howto ol { margin: 8px 0 0 18px; }
 .legal { color: var(--muted); }
+
+/* Viewer modal tweaks */
+.modal-body--viewer { background: #0a0a0b; }
+.viewer-stage {
+  position: relative;
+  display: grid; place-items: center;
+  width: 100%; height: 70vh; /* room for controls above */
+  background: radial-gradient(1200px 600px at 50% 40%, rgba(255,255,255,0.04), transparent 60%);
+}
+.viewer-img {
+  max-width: min(92vw, 860px);
+  max-height: 66vh;
+  width: auto; height: auto;
+  border-radius: 12px;
+  object-fit: contain;
+  box-shadow: 0 10px 40px rgba(0,0,0,.35);
+  border: 1px solid rgba(255,255,255,.07);
+  background: #0d0d0f;
+}
+
+/* overlays in viewer */
+.viewer-overlay {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  width: min(92vw, 860px);
+  height: min(66vh, 66vh);
+  border-radius: 12px;
+}
+.viewer-overlay--half {
+  clip-path: inset(50% 0 0 0 round 12px);
+}
+.viewer-overlay--full {}
+
+/* dot bar in viewer */
+.viewer-dotbar {
+  position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%);
+  display: inline-flex; gap: 10px; align-items: center;
+  padding: 8px 12px; border-radius: 999px;
+  background: rgba(0,0,0,.4); backdrop-filter: blur(2px);
+  border: 1px solid rgba(255,255,255,.12);
+}
+.viewer-dot { width: 20px; height: 20px; border-radius: 999px; border: 1px solid rgba(0,0,0,.25); }

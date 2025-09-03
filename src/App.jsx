@@ -1,5 +1,3 @@
-// App shell: orchestrates state and composes modular components.
-
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { OVERLAY_MODES, OVERLAY_ALPHAS, GRID_COLUMNS } from './constants'
 import { saveTiles, loadTiles } from './state/storage'
@@ -9,37 +7,37 @@ import Modal from './Modal'
 import Grid from './components/Grid'
 import Toolbar from './components/Toolbar'
 import PaletteSidebar from './components/PaletteSidebar'
+import ImageViewerModal from './components/ImageViewerModal'
 import { createPlaceholderTile, sampleColors9 } from './utils/placeholder'
 
 export default function App() {
-  // UI chrome
   const [navOpen, setNavOpen] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
 
-  // Grid state (load async from IndexedDB)
   const [items, setItems] = useState([])
   useEffect(() => { (async () => setItems(await loadTiles()))() }, [])
-
   const [activeId, setActiveId] = useState(null)
 
-  // Color overlay controls
+  // Global overlay controls
   const [showColor, setShowColor] = useState(true)
   const [mode, setMode] = useState('average')
   const [overlayMode, setOverlayMode] = useState(OVERLAY_MODES.DOT)
   const [overlayAlphaIdx, setOverlayAlphaIdx] = useState(2)
 
-  // Export preview modal
+  // Export preview
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewIncludeOverlays, setPreviewIncludeOverlays] = useState(false)
 
+  // NEW: Image viewer modal
+  const [viewerOpen, setViewerOpen] = useState(false)
+  const [viewerIndex, setViewerIndex] = useState(0)
+
   const { importing, importFiles } = useImageImporter()
   const inputRef = useRef(null)
 
-  // Persist to IndexedDB whenever items change (best-effort; failures are non-fatal)
   useEffect(() => { saveTiles(items) }, [items])
 
-  // Import handlers
   const onFiles = async (files) => {
     const newTiles = await importFiles(files)
     if (newTiles.length) setItems(prev => prev.concat(newTiles))
@@ -47,34 +45,25 @@ export default function App() {
   const onDropInput = (e) => { e.preventDefault(); onFiles(e.dataTransfer.files) }
   const onInputChange = (e) => onFiles(e.target.files)
 
-  // Export preview
   const columns = GRID_COLUMNS
   const overlayAlpha = OVERLAY_ALPHAS[overlayAlphaIdx]
 
+  // Export preview generation (unchanged behavior)
   const generatePreview = useCallback(async () => {
     if (!previewOpen || !items.length) return
     if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null) }
-
     const url = await exportGridObjectURL({
       tiles: items,
       columns,
       includeOverlays: previewIncludeOverlays,
       showColor, mode, overlayMode,
       overlayAlpha,
-      tileSize: 256,
-      spacing: 12,
-      background: '#0f0f10',
+      tileSize: 256, spacing: 12, background: '#0f0f10',
     })
     if (url) setPreviewUrl(url)
   }, [previewOpen, items, columns, previewIncludeOverlays, showColor, mode, overlayMode, overlayAlpha, previewUrl])
-
-  const openPreview = useCallback(() => {
-    if (!items.length) return
-    setPreviewOpen(true)
-  }, [items.length])
-
+  const openPreview = useCallback(() => { if (items.length) setPreviewOpen(true) }, [items.length])
   useEffect(() => { generatePreview() }, [generatePreview])
-
   const closePreview = useCallback(() => {
     setPreviewOpen(false)
     if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null) }
@@ -83,25 +72,18 @@ export default function App() {
   const downloadExport = useCallback(async () => {
     if (!items.length) return
     const blob = await exportGrid({
-      tiles: items,
-      columns,
+      tiles: items, columns,
       includeOverlays: previewIncludeOverlays,
-      showColor, mode, overlayMode,
-      overlayAlpha,
-      tileSize: 512,
-      spacing: 12,
-      background: '#0f0f10',
+      showColor, mode, overlayMode, overlayAlpha,
+      tileSize: 512, spacing: 12, background: '#0f0f10',
     })
     if (!blob) return
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'gridtone_export.jpg'
-    a.click()
+    const a = document.createElement('a'); a.href = url; a.download = 'gridtone_export.jpg'; a.click()
     URL.revokeObjectURL(url)
   }, [items, columns, previewIncludeOverlays, showColor, mode, overlayMode, overlayAlpha])
 
-  // Sample 3×3 and Clear Grid (now produce blobs so they persist nicely)
+  // Sample 3×3 and Clear Grid
   const loadSampleGrid = useCallback(async () => {
     if (items.length) {
       const ok = window.confirm('Replace current grid with a 3×3 sample? This will discard your current arrangement.')
@@ -112,7 +94,6 @@ export default function App() {
     for (let i = 0; i < 9; i++) {
       // eslint-disable-next-line no-await-in-loop
       const t = await createPlaceholderTile({ rgb: colors[i], label: i + 1, size: 900 })
-      // Convert the canvas result (dataURL inside util) to a Blob for IDB
       const blob = await fetch(t.img.src).then(r => r.blob()).catch(()=>null)
       tiles.push({ ...t, blob })
     }
@@ -124,6 +105,26 @@ export default function App() {
     const ok = window.confirm('Remove all images from the grid? This cannot be undone.')
     if (ok) setItems([])
   }, [items.length])
+
+  // Open viewer on tile click
+  const handleTileClick = useCallback((idx) => {
+    setViewerIndex(idx)
+    setViewerOpen(true)
+  }, [])
+
+  // Delete from viewer
+  const deleteFromViewer = useCallback((idx) => {
+    setItems((arr) => {
+      const next = arr.slice(0, idx).concat(arr.slice(idx + 1))
+      // Adjust viewer index after deletion
+      if (next.length === 0) {
+        setViewerOpen(false)
+      } else if (idx >= next.length) {
+        setViewerIndex(next.length - 1)
+      }
+      return next
+    })
+  }, [])
 
   return (
     <>
@@ -172,16 +173,11 @@ export default function App() {
             onOpenPreview={openPreview}
             onLoadSample={loadSampleGrid}
             onClearGrid={clearGrid}
-            showColor={showColor}
-            setShowColor={setShowColor}
-            mode={mode}
-            setMode={setMode}
-            overlayMode={overlayMode}
-            setOverlayMode={setOverlayMode}
-            overlayAlphaIdx={overlayAlphaIdx}
-            setOverlayAlphaIdx={setOverlayAlphaIdx}
-            showSidebar={showSidebar}
-            setShowSidebar={setShowSidebar}
+            showColor={showColor} setShowColor={setShowColor}
+            mode={mode} setMode={setMode}
+            overlayMode={overlayMode} setOverlayMode={setOverlayMode}
+            overlayAlphaIdx={overlayAlphaIdx} setOverlayAlphaIdx={setOverlayAlphaIdx}
+            showSidebar={showSidebar} setShowSidebar={setShowSidebar}
           />
 
           <Grid
@@ -192,7 +188,8 @@ export default function App() {
             showColor={showColor}
             mode={mode}
             overlayMode={overlayMode}
-            overlayAlpha={OVERLAY_ALPHAS[overlayAlphaIdx]}
+            overlayAlpha={overlayAlpha}
+            onTileClick={handleTileClick} // NEW
           />
         </div>
 
@@ -215,24 +212,6 @@ export default function App() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer id="howto" className="site-footer">
-        <div className="howto">
-          <h4>How it works</h4>
-          <ol>
-            <li>Tap “Add Images” or drag files onto the page.</li>
-            <li>Drag to reorder. Toggle Color Map and choose Average or Dominant.</li>
-            <li>Select overlay style (Dot / Half / Full) and adjust opacity.</li>
-            <li>Use Load Sample 3×3 for quick testing.</li>
-            <li>Use Preview Export to confirm the collage, then Download JPG.</li>
-          </ol>
-        </div>
-        <div id="privacy" className="legal">
-          <p>Images stay in your browser. No uploads. Clear data by clearing site storage.</p>
-          <p>© {new Date().getFullYear()} GridTone</p>
-        </div>
-      </footer>
-
       {/* Export Preview Modal */}
       <Modal open={previewOpen} onClose={closePreview} title="Export Preview">
         <div className="modal-header">
@@ -248,7 +227,7 @@ export default function App() {
             />
             <span>Include overlays (use current Color Map/Mode/Opacity)</span>
           </label>
-          <button className="btn" onClick={async () => downloadExport()}>Download JPG</button>
+          <button className="btn" onClick={downloadExport}>Download JPG</button>
         </div>
         <div className="modal-body">
           {previewUrl ? (
@@ -262,6 +241,21 @@ export default function App() {
           )}
         </div>
       </Modal>
+
+      {/* NEW: Image Viewer Modal */}
+      <ImageViewerModal
+        open={viewerOpen}
+        onClose={()=>setViewerOpen(false)}
+        items={items}
+        index={viewerIndex}
+        setIndex={setViewerIndex}
+        onDeleteCurrent={deleteFromViewer}
+        showColor={showColor} setShowColor={setShowColor}
+        mode={mode} setMode={setMode}
+        overlayMode={overlayMode} setOverlayMode={setOverlayMode}
+        overlayAlphaIdx={overlayAlphaIdx} setOverlayAlphaIdx={setOverlayAlphaIdx}
+        overlayAlphas={OVERLAY_ALPHAS}
+      />
     </>
   )
 }
