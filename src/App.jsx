@@ -40,26 +40,6 @@ function loadState(){
   }
 }
 
-/**
- * Error boundary.
- */
-class ErrorBoundary extends React.Component {
-  constructor(props){ super(props); this.state = { hasError: false } }
-  static getDerivedStateFromError(){ return { hasError: true } }
-  componentDidCatch(err){ console.error('UI error caught:', err) }
-  render(){
-    if (this.state.hasError) {
-      return (
-        <div style={{padding:'1rem'}}>
-          <h3>Something went wrong</h3>
-          <p>Try reloading this page. If this persists, please report the steps to reproduce.</p>
-        </div>
-      )
-    }
-    return this.props.children
-  }
-}
-
 export default function App(){
   // Site UI
   const [navOpen, setNavOpen] = useState(false)
@@ -86,9 +66,6 @@ export default function App(){
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
-  /**
-   * Importer.
-   */
   const onFiles = async (files) => {
     if (!files || !files.length) return
     setImporting(true)
@@ -140,9 +117,6 @@ export default function App(){
     setItems(arrayMove(items, oldIndex, newIndex))
   }
 
-  /**
-   * Export preview: generates a smaller composite and shows it in a modal (<img src=objectURL>).
-   */
   const openPreview = useCallback(async () => {
     if (!items.length) return
     if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null) }
@@ -153,7 +127,7 @@ export default function App(){
       includeOverlays: previewIncludeOverlays,
       showColor, mode, overlayMode,
       overlayAlpha: OVERLAY_ALPHAS[overlayAlphaIdx],
-      tileSize: 256, // fast preview
+      tileSize: 256,
       spacing: 12,
       background: '#0f0f10'
     })
@@ -171,9 +145,6 @@ export default function App(){
     }
   }, [previewUrl])
 
-  /**
-   * Final export at full resolution.
-   */
   const downloadExport = useCallback(async ()=>{
     if (!items.length) return
     const blob = await exportGrid({
@@ -200,7 +171,7 @@ export default function App(){
   const handleNavClick = () => setNavOpen(false)
 
   return (
-    <ErrorBoundary>
+    <>
       {/* Site Header */}
       <header className="site-header">
         <div className="brand">
@@ -261,7 +232,7 @@ export default function App(){
               <select className="select" value={overlayMode} onChange={e=>setOverlayMode(e.target.value)} aria-label="Overlay mode">
                 <option value={OVERLAY_MODES.DOT}>Dot</option>
                 <option value={OVERLAY_MODES.HALF}>Half Overlay</option>
-                <option value={OVERLAY_MODESFULL}>Full Overlay</option>
+                <option value={OVERLAY_MODES.FULL}>Full Overlay</option>
               </select>
 
               <div className="opacity-control">
@@ -421,7 +392,7 @@ export default function App(){
           </div>
         </div>
       )}
-    </ErrorBoundary>
+    </>
   )
 }
 
