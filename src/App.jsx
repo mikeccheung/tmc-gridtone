@@ -5,7 +5,7 @@ import {
   averageColorFromBitmap,
   dominantColorsFromBitmap,
 } from './colorUtils'
-import { SAMPLE_THUMBS } from './placeholder'
+import { SAMPLE_THUMBS } from './utils/placeholder'
 import html2canvas from 'html2canvas'
 
 const DEFAULT_OPACITY = 0.5
