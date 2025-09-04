@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   DndContext,
   useSensor,
@@ -15,20 +15,12 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { OVERLAY_MODES } from '../constants'
 
-/**
- * Grid
- * - Square tiles in rows of 3 (mobile-first).
- * - Drag & drop with a small press delay so scrolling doesn’t conflict.
- * - Overlays render in a pointer-events:none layer (keeps UI responsive).
- * - Dominant(3) overlay appears as three horizontal stripes (descending by weight).
- */
+/** Helpers */
+const rgb = ([r,g,b]) => `rgb(${r}, ${g}, ${b})`
 
-/** Utilities */
-function rgbToCss([r, g, b]) { return `rgb(${r}, ${g}, ${b})` }
-
-/** Sortable item wrapper */
-function SortableTile({ item, index, onRemove, overlay, children }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
+/** Sortable tile */
+function SortableTile({ item, index, onRemove, overlay, onClick, dragListeners, dragAttributes }) {
+  const { setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -37,104 +29,80 @@ function SortableTile({ item, index, onRemove, overlay, children }) {
 
   return (
     <div ref={setNodeRef} style={style} className="tile">
-      <button
-        className="tile-close"
-        onClick={() => onRemove(item.id)}
-        aria-label={`Remove item ${index + 1}`}
+      <button className="tile-close" onClick={() => onRemove(item.id)} aria-label={`Remove item ${index+1}`}>×</button>
+      <div
+        className="tile-imgWrap"
+        {...dragListeners}
+        {...dragAttributes}
+        style={{ touchAction: 'none' }}  /* avoids touch scroll stealing drag */
       >
-        ×
-      </button>
-
-      {/* Image content */}
-      <div className="tile-imgWrap" {...attributes} {...listeners}>
-        {/* The draggable handle is the whole card, but we add a press delay in sensors */}
-        {children}
-        {/* Overlay layer (non-interactive) */}
+        <img
+          src={item.img?.src}
+          alt={`Tile ${index+1}`}
+          className="tile-img"
+          draggable={false}
+          onClick={onClick}
+        />
         {overlay}
       </div>
     </div>
   )
 }
 
-/** Overlay factory */
+/** Overlay */
 function TileOverlay({ show, mode, overlayMode, alpha, avg, dom }) {
   if (!show) return null
-
   const opacity = Math.max(0, Math.min(1, alpha))
-  const styleBase = { position: 'absolute', inset: 0, pointerEvents: 'none' }
+  const base = { position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3 }
 
-  // full/half rect overlay
-  if (overlayMode === OVERLAY_MODES.FULL || overlayMode === OVERLAY_MODES.HALF) {
-    const height = overlayMode === OVERLAY_MODES.HALF ? '50%' : '100%'
-
-    if (mode === 'average') {
-      return (
-        <div style={styleBase}>
-          <div style={{
-            position: 'absolute',
-            left: 0, right: 0, bottom: 0,
-            height,
-            background: rgbToCss(avg),
-            opacity,
-            borderRadius: '18px',
-          }} />
-        </div>
-      )
-    } else {
-      const [c1, c2, c3] = dom?.length ? dom : [avg, avg, avg]
-      return (
-        <div style={styleBase}>
-          <div style={{
-            position: 'absolute',
-            left: 0, right: 0, bottom: 0,
-            height,
-            borderRadius: '18px',
-            overflow: 'hidden',
-            opacity,
-          }}>
-            <div style={{ height: '33.34%', background: rgbToCss(c1) }} />
-            <div style={{ height: '33.33%', background: rgbToCss(c2) }} />
-            <div style={{ height: '33.33%', background: rgbToCss(c3) }} />
-          </div>
-        </div>
-      )
-    }
-  }
-
-  // dot overlay
   if (overlayMode === OVERLAY_MODES.DOT) {
-    const bg =
-      mode === 'average'
-        ? rgbToCss(avg)
-        : rgbToCss((dom && dom[0]) || avg)
-
+    const c = mode === 'average' ? avg : (dom?.[0] || avg)
     return (
-      <div style={styleBase}>
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 12,
-            left: 12,
-            width: 20,
-            height: 20,
-            borderRadius: '999px',
-            background: bg,
-            opacity,
-            boxShadow: '0 0 0 2px rgba(0,0,0,.35)',
-          }}
-        />
+      <div style={base}>
+        <div style={{
+          position: 'absolute',
+          left: 12, bottom: 12,
+          width: 20, height: 20, borderRadius: 9999,
+          background: rgb(c), opacity,
+          boxShadow: '0 0 0 2px rgba(0,0,0,.35)'
+        }}/>
       </div>
     )
   }
 
-  return null
+  const height = overlayMode === OVERLAY_MODES.HALF ? '50%' : '100%'
+
+  if (mode === 'average') {
+    return (
+      <div style={base}>
+        <div style={{
+          position: 'absolute', left: 0, right: 0, bottom: 0,
+          height, background: rgb(avg), opacity,
+          borderRadius: 18,
+        }}/>
+      </div>
+    )
+  } else {
+    const [c1, c2, c3] = dom?.length ? dom : [avg, avg, avg]
+    return (
+      <div style={base}>
+        <div style={{
+          position: 'absolute', left: 0, right: 0, bottom: 0,
+          height, borderRadius: 18, overflow: 'hidden', opacity
+        }}>
+          <div style={{ height: '33.34%', background: rgb(c1) }} />
+          <div style={{ height: '33.33%', background: rgb(c2) }} />
+          <div style={{ height: '33.33%', background: rgb(c3) }} />
+        </div>
+      </div>
+    )
+  }
 }
 
-/** Main Grid component */
+/** Main Grid */
 export default function Grid({
   items,
   setItems,
-  activeId,
   setActiveId,
   showColor,
   mode,
@@ -144,15 +112,15 @@ export default function Grid({
   onAddClick,
   onDropFiles,
 }) {
+  const [isDragging, setIsDragging] = useState(false)
 
-  // Press delay so drag doesn’t fight with scroll
+  // Start drag after small movement instead of long press; smoother on touch.
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { delay: 120, tolerance: 6 },
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
   )
 
   const handleDragEnd = (e) => {
+    setIsDragging(false)
     const { active, over } = e
     if (!over || active.id === over.id) return
     const oldIndex = items.findIndex(i => i.id === active.id)
@@ -161,11 +129,19 @@ export default function Grid({
     setItems(arrayMove(items, oldIndex, newIndex))
   }
 
-  const handleRemove = (id) => {
-    setItems(items.filter(i => i.id !== id))
+  const handleDragStart = ({ active }) => {
+    setIsDragging(true)
+    setActiveId?.(active.id)
   }
 
-  const gridContent = useMemo(() => {
+  const handleDragCancel = () => {
+    setIsDragging(false)
+    setActiveId?.(null)
+  }
+
+  const removeItem = (id) => setItems(items.filter(i => i.id !== id))
+
+  const content = useMemo(() => {
     if (!items.length) {
       return (
         <div
@@ -187,9 +163,9 @@ export default function Grid({
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
-        onDragStart={({ active }) => setActiveId?.(active.id)}
-        onDragEnd={(e) => { handleDragEnd(e); setActiveId?.(null) }}
-        onDragCancel={() => setActiveId?.(null)}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
         <SortableContext items={items.map(i => i.id)} strategy={rectSortingStrategy}>
           <div className="grid">
@@ -210,28 +186,20 @@ export default function Grid({
                   key={item.id}
                   item={item}
                   index={idx}
-                  onRemove={handleRemove}
+                  onRemove={removeItem}
                   overlay={overlay}
-                >
-                  <img
-                    src={item.img?.src}
-                    alt={`Tile ${idx + 1}`}
-                    className="tile-img"
-                    draggable={false}
-                    onClick={() => onTileClick?.(item)}
-                  />
-                </SortableTile>
+                  onClick={() => { if (!isDragging) onTileClick?.(item) }}
+                  dragListeners={{}} /* supplied by useSortable via parent */
+                  dragAttributes={{}}
+                />
               )
             })}
           </div>
         </SortableContext>
       </DndContext>
     )
-  }, [items, sensors, showColor, mode, overlayMode, overlayAlpha])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, showColor, mode, overlayMode, overlayAlpha, isDragging])
 
-  return (
-    <section className="grid-wrap">
-      {gridContent}
-    </section>
-  )
+  return <section className="grid-wrap">{content}</section>
 }

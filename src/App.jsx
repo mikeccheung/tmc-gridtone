@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Grid from './components/Grid.jsx'
+import ImageViewerModal from './components/ImageViewerModal.jsx'
 import { OVERLAY_MODES } from './constants'
 import {
   averageColorFromBitmap,
@@ -24,9 +25,14 @@ export default function App() {
   // Export UI
   const [exportIncludeOverlay, setExportIncludeOverlay] = useState(true)
 
+  // Modal
+  const [viewerOpen, setViewerOpen] = useState(false)
+  const [viewerIndex, setViewerIndex] = useState(0)
+
   const fileInputRef = useRef(null)
   const exportRootRef = useRef(null)
 
+  // Load from localStorage
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_KEY)
@@ -37,6 +43,7 @@ export default function App() {
     } catch {}
   }, [])
 
+  // Save to localStorage (lightweight)
   useEffect(() => {
     const skinny = items.map(it => ({
       id: it.id,
@@ -68,7 +75,6 @@ export default function App() {
       } finally {
         if (bitmap && bitmap.close) bitmap.close()
       }
-
       newItems.push({ id: crypto.randomUUID(), img, avg, dom })
     }
     setItems(prev => [...prev, ...newItems])
@@ -76,7 +82,7 @@ export default function App() {
 
   const onDropFiles = (fileList) => onFilesSelected(fileList)
 
-  // Load richer 3x3 samples
+  // 3×3 samples
   const loadSampleGrid = async () => {
     const thumbs = SAMPLE_THUMBS.slice(0, 9)
     const newItems = []
@@ -98,18 +104,21 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const overlayLabel = useMemo(() => {
-    if (overlayMode === OVERLAY_MODES.DOT) return 'Dot'
-    if (overlayMode === OVERLAY_MODES.HALF) return 'Half'
-    return 'Full'
-  }, [overlayMode])
+  // Modal open
+  const handleTileClick = (item) => {
+    const i = items.findIndex(x => x.id === item.id)
+    if (i >= 0) {
+      setViewerIndex(i)
+      setViewerOpen(true)
+    }
+  }
 
+  // Export JPG
   const handleExportJPG = async () => {
     const node = exportRootRef.current
     if (!node) return
     const prevShow = showColor
     let restore = false
-
     try {
       if (exportIncludeOverlay && !showColor) {
         setShowColor(true)
@@ -158,7 +167,11 @@ export default function App() {
               <option value="dominant">Dominant (3)</option>
             </select>
 
-            <select value={overlayMode} onChange={(e) => setOverlayMode(Number(e.target.value))} aria-label="Overlay style">
+            <select
+              value={overlayMode}
+              onChange={(e) => setOverlayMode(Number(e.target.value))}
+              aria-label="Overlay style"
+            >
               <option value={OVERLAY_MODES.DOT}>Dot</option>
               <option value={OVERLAY_MODES.HALF}>Half</option>
               <option value={OVERLAY_MODES.FULL}>Full</option>
@@ -217,12 +230,27 @@ export default function App() {
             mode={mode}
             overlayMode={overlayMode}
             overlayAlpha={overlayAlpha}
-            onTileClick={() => {}}
+            onTileClick={handleTileClick}
             onAddClick={onAddClick}
             onDropFiles={onDropFiles}
           />
         </div>
       </main>
+
+      {/* Image viewer modal */}
+      {viewerOpen && (
+        <ImageViewerModal
+          items={items}
+          index={viewerIndex}
+          onClose={() => setViewerOpen(false)}
+          onPrev={() => setViewerIndex((i) => Math.max(0, i - 1))}
+          onNext={() => setViewerIndex((i) => Math.min(items.length - 1, i + 1))}
+          showColor={showColor}
+          mode={mode}
+          overlayMode={overlayMode}
+          overlayAlpha={overlayAlpha}
+        />
+      )}
 
       <footer className="footer">
         <p>Images stay on your device. No uploads. Install as a PWA to plan offline.</p>
