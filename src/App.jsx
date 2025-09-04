@@ -5,6 +5,7 @@ import {
   averageColorFromBitmap,
   dominantColorsFromBitmap,
 } from './colorUtils'
+import { SAMPLE_THUMBS } from './placeholder'
 import html2canvas from 'html2canvas'
 
 const DEFAULT_OPACITY = 0.5
@@ -23,13 +24,9 @@ export default function App() {
   // Export UI
   const [exportIncludeOverlay, setExportIncludeOverlay] = useState(true)
 
-  // File input ref (hidden)
   const fileInputRef = useRef(null)
-
-  // A wrapper we capture for export (encapsulates only the grid, not the toolbar).
   const exportRootRef = useRef(null)
 
-  // Load/save items to localStorage
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_KEY)
@@ -41,7 +38,6 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    // Persist lightweight data (omit image element objects)
     const skinny = items.map(it => ({
       id: it.id,
       img: { src: it.img?.src },
@@ -55,7 +51,6 @@ export default function App() {
 
   const onFilesSelected = async (files) => {
     if (!files || !files.length) return
-
     const maxSide = 1600
     const newItems = []
     for (const file of Array.from(files)) {
@@ -65,28 +60,43 @@ export default function App() {
       img.src = down
       await imageLoaded(img)
 
-      // Compute colors using your bitmap-based helpers
       const bitmap = await createImageBitmap(img)
       let avg = [128,128,128], dom = [[128,128,128],[128,128,128],[128,128,128]]
       try {
         avg = averageColorFromBitmap(bitmap)
         dom = dominantColorsFromBitmap(bitmap, 3)
       } finally {
-        // Free browser memory asap
         if (bitmap && bitmap.close) bitmap.close()
       }
 
-      newItems.push({
-        id: crypto.randomUUID(),
-        img,
-        avg,
-        dom
-      })
+      newItems.push({ id: crypto.randomUUID(), img, avg, dom })
     }
     setItems(prev => [...prev, ...newItems])
   }
 
   const onDropFiles = (fileList) => onFilesSelected(fileList)
+
+  // Load richer 3x3 samples
+  const loadSampleGrid = async () => {
+    const thumbs = SAMPLE_THUMBS.slice(0, 9)
+    const newItems = []
+    for (const src of thumbs) {
+      const img = new Image()
+      img.src = src
+      await imageLoaded(img)
+      const bitmap = await createImageBitmap(img)
+      let avg = [128,128,128], dom = [[128,128,128],[128,128,128],[128,128,128]]
+      try {
+        avg = averageColorFromBitmap(bitmap)
+        dom = dominantColorsFromBitmap(bitmap, 3)
+      } finally {
+        if (bitmap && bitmap.close) bitmap.close()
+      }
+      newItems.push({ id: crypto.randomUUID(), img, avg, dom })
+    }
+    setItems(newItems)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   const overlayLabel = useMemo(() => {
     if (overlayMode === OVERLAY_MODES.DOT) return 'Dot'
@@ -97,7 +107,6 @@ export default function App() {
   const handleExportJPG = async () => {
     const node = exportRootRef.current
     if (!node) return
-
     const prevShow = showColor
     let restore = false
 
@@ -144,20 +153,12 @@ export default function App() {
               <span>Color Map</span>
             </label>
 
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value)}
-              aria-label="Color mode"
-            >
+            <select value={mode} onChange={(e) => setMode(e.target.value)} aria-label="Color mode">
               <option value="average">Average</option>
               <option value="dominant">Dominant (3)</option>
             </select>
 
-            <select
-              value={overlayMode}
-              onChange={(e) => setOverlayMode(Number(e.target.value))}
-              aria-label="Overlay style"
-            >
+            <select value={overlayMode} onChange={(e) => setOverlayMode(Number(e.target.value))} aria-label="Overlay style">
               <option value={OVERLAY_MODES.DOT}>Dot</option>
               <option value={OVERLAY_MODES.HALF}>Half</option>
               <option value={OVERLAY_MODES.FULL}>Full</option>
@@ -178,6 +179,7 @@ export default function App() {
 
           <div className="row">
             <button className="btn" onClick={onAddClick}>Add Images</button>
+            <button className="btn" onClick={loadSampleGrid}>Load Sample 3×3</button>
 
             <label className="check">
               <input
