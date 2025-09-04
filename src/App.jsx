@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import Grid from './components/Grid.jsx'
 import ImageViewerModal from './components/ImageViewerModal.jsx'
 import { OVERLAY_MODES } from './constants'
@@ -11,47 +11,52 @@ import html2canvas from 'html2canvas'
 
 const DEFAULT_OPACITY = 0.5
 const LS_KEY = 'gridtone-v1-items'
+const FALLBACK = [128, 128, 128]
+
+const coerceItem = (it) => ({
+  id: it.id ?? crypto.randomUUID(),
+  img: it.img && it.img.src ? { src: it.img.src } : it.img, // keep src only
+  avg: Array.isArray(it.avg) && it.avg.length === 3 ? it.avg : FALLBACK,
+  dom: Array.isArray(it.dom) && it.dom.length
+    ? [...it.dom, FALLBACK, FALLBACK, FALLBACK].slice(0, 3)
+    : [FALLBACK, FALLBACK, FALLBACK],
+})
 
 export default function App() {
   const [items, setItems] = useState([])
   const [activeId, setActiveId] = useState(null)
 
-  // Color controls
   const [showColor, setShowColor] = useState(true)
   const [mode, setMode] = useState('average') // 'average' | 'dominant'
   const [overlayMode, setOverlayMode] = useState(OVERLAY_MODES.DOT) // DOT | HALF | FULL
   const [overlayAlpha, setOverlayAlpha] = useState(DEFAULT_OPACITY)
 
-  // Export UI
   const [exportIncludeOverlay, setExportIncludeOverlay] = useState(true)
 
-  // Modal
   const [viewerOpen, setViewerOpen] = useState(false)
   const [viewerIndex, setViewerIndex] = useState(0)
 
   const fileInputRef = useRef(null)
   const exportRootRef = useRef(null)
 
-  // Load from localStorage
+  // Load from localStorage and coerce to the new shape
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_KEY)
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) setItems(parsed)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        setItems(parsed.map(coerceItem))
       }
     } catch {}
   }, [])
 
-  // Save to localStorage (lightweight)
+  // Save compact items to storage
   useEffect(() => {
-    const skinny = items.map(it => ({
-      id: it.id,
-      img: { src: it.img?.src },
-      avg: it.avg,
-      dom: it.dom
-    }))
-    try { localStorage.setItem(LS_KEY, JSON.stringify(skinny)) } catch {}
+    try {
+      const skinny = items.map(coerceItem)
+      localStorage.setItem(LS_KEY, JSON.stringify(skinny))
+    } catch {}
   }, [items])
 
   const onAddClick = () => fileInputRef.current?.click()
@@ -68,21 +73,23 @@ export default function App() {
       await imageLoaded(img)
 
       const bitmap = await createImageBitmap(img)
-      let avg = [128,128,128], dom = [[128,128,128],[128,128,128],[128,128,128]]
+      let avg = FALLBACK
+      let dom = [FALLBACK, FALLBACK, FALLBACK]
       try {
-        avg = averageColorFromBitmap(bitmap)
-        dom = dominantColorsFromBitmap(bitmap, 3)
+        avg = averageColorFromBitmap(bitmap) || FALLBACK
+        const d = dominantColorsFromBitmap(bitmap, 3) || []
+        dom = [...d, FALLBACK, FALLBACK, FALLBACK].slice(0, 3)
       } finally {
         if (bitmap && bitmap.close) bitmap.close()
       }
-      newItems.push({ id: crypto.randomUUID(), img, avg, dom })
+      newItems.push(coerceItem({ id: crypto.randomUUID(), img, avg, dom }))
     }
     setItems(prev => [...prev, ...newItems])
   }
 
   const onDropFiles = (fileList) => onFilesSelected(fileList)
 
-  // 3×3 samples
+  // 3×3 sample thumbnails
   const loadSampleGrid = async () => {
     const thumbs = SAMPLE_THUMBS.slice(0, 9)
     const newItems = []
@@ -91,29 +98,26 @@ export default function App() {
       img.src = src
       await imageLoaded(img)
       const bitmap = await createImageBitmap(img)
-      let avg = [128,128,128], dom = [[128,128,128],[128,128,128],[128,128,128]]
+      let avg = FALLBACK
+      let dom = [FALLBACK, FALLBACK, FALLBACK]
       try {
-        avg = averageColorFromBitmap(bitmap)
-        dom = dominantColorsFromBitmap(bitmap, 3)
+        avg = averageColorFromBitmap(bitmap) || FALLBACK
+        const d = dominantColorsFromBitmap(bitmap, 3) || []
+        dom = [...d, FALLBACK, FALLBACK, FALLBACK].slice(0, 3)
       } finally {
         if (bitmap && bitmap.close) bitmap.close()
       }
-      newItems.push({ id: crypto.randomUUID(), img, avg, dom })
+      newItems.push(coerceItem({ id: crypto.randomUUID(), img, avg, dom }))
     }
     setItems(newItems)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // Modal open
   const handleTileClick = (item) => {
     const i = items.findIndex(x => x.id === item.id)
-    if (i >= 0) {
-      setViewerIndex(i)
-      setViewerOpen(true)
-    }
+    if (i >= 0) { setViewerIndex(i); setViewerOpen(true) }
   }
 
-  // Export JPG
   const handleExportJPG = async () => {
     const node = exportRootRef.current
     if (!node) return
@@ -128,7 +132,7 @@ export default function App() {
       const canvas = await html2canvas(node, {
         backgroundColor: '#0f0f10',
         useCORS: true,
-        scale: Math.min(2, window.devicePixelRatio || 1.5)
+        scale: Math.min(2, window.devicePixelRatio || 1.5),
       })
       const dataUrl = canvas.toDataURL('image/jpeg', 0.95)
       downloadBlobURL(dataUrl, 'gridtone.jpg')
@@ -136,10 +140,7 @@ export default function App() {
       console.error('Export failed', e)
       alert('Export failed. Try again after a fresh reload.')
     } finally {
-      if (restore) {
-        setShowColor(prevShow)
-        await nextFrame()
-      }
+      if (restore) { setShowColor(prevShow); await nextFrame() }
     }
   }
 
@@ -154,22 +155,18 @@ export default function App() {
         <div className="controls">
           <div className="row">
             <label className="check">
-              <input
-                type="checkbox"
-                checked={showColor}
-                onChange={(e) => setShowColor(e.target.checked)}
-              />
+              <input type="checkbox" checked={showColor} onChange={(e)=>setShowColor(e.target.checked)} />
               <span>Color Map</span>
             </label>
 
-            <select value={mode} onChange={(e) => setMode(e.target.value)} aria-label="Color mode">
+            <select value={mode} onChange={(e)=>setMode(e.target.value)} aria-label="Color mode">
               <option value="average">Average</option>
               <option value="dominant">Dominant (3)</option>
             </select>
 
             <select
               value={overlayMode}
-              onChange={(e) => setOverlayMode(Number(e.target.value))}
+              onChange={(e)=>setOverlayMode(Number(e.target.value))}
               aria-label="Overlay style"
             >
               <option value={OVERLAY_MODES.DOT}>Dot</option>
@@ -180,12 +177,9 @@ export default function App() {
             <label className="range">
               <span>Opacity</span>
               <input
-                type="range"
-                min="0.2"
-                max="0.8"
-                step="0.15"
+                type="range" min="0.2" max="0.8" step="0.15"
                 value={overlayAlpha}
-                onChange={(e) => setOverlayAlpha(Number(e.target.value))}
+                onChange={(e)=>setOverlayAlpha(Number(e.target.value))}
               />
             </label>
           </div>
@@ -198,7 +192,7 @@ export default function App() {
               <input
                 type="checkbox"
                 checked={exportIncludeOverlay}
-                onChange={(e) => setExportIncludeOverlay(e.target.checked)}
+                onChange={(e)=>setExportIncludeOverlay(e.target.checked)}
               />
               <span>Include overlays</span>
             </label>
@@ -217,7 +211,7 @@ export default function App() {
           accept="image/*"
           multiple
           hidden
-          onChange={(e) => onFilesSelected(e.target.files)}
+          onChange={(e)=>onFilesSelected(e.target.files)}
         />
 
         <div ref={exportRootRef} id="export-root">
@@ -237,14 +231,13 @@ export default function App() {
         </div>
       </main>
 
-      {/* Image viewer modal */}
       {viewerOpen && (
         <ImageViewerModal
           items={items}
           index={viewerIndex}
-          onClose={() => setViewerOpen(false)}
-          onPrev={() => setViewerIndex((i) => Math.max(0, i - 1))}
-          onNext={() => setViewerIndex((i) => Math.min(items.length - 1, i + 1))}
+          onClose={()=>setViewerOpen(false)}
+          onPrev={()=>setViewerIndex(i=>Math.max(0, i-1))}
+          onNext={()=>setViewerIndex(i=>Math.min(items.length-1, i+1))}
           showColor={showColor}
           mode={mode}
           overlayMode={overlayMode}
@@ -259,7 +252,7 @@ export default function App() {
   )
 }
 
-/* ---------- helpers ---------- */
+/* ---------------- helpers ---------------- */
 
 function readFileAsDataURL(file) {
   return new Promise((resolve, reject) => {
