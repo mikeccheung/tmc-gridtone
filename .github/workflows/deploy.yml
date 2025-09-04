@@ -29,6 +29,9 @@ jobs:
       - name: Install deps
         run: npm ci
 
+      - name: Check deps
+        run: npm ls html2canvas || (echo "Missing html2canvas, run npm install" && exit 1)
+
       - name: Build
         run: npm run build
 
