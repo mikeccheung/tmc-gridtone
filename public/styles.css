@@ -376,3 +376,86 @@ img { display: block; max-width: 100%; height: auto; }
 .btn.primary { background: #2d7aff; color: #fff; }
 #export-root { margin: 12px auto; max-width: 980px; }
 .footer { padding: 16px; opacity: .7; text-align: center; }
+
+/* Grid sizing */
+.grid-wrap { width: 100%; display: grid; place-items: center; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 980px;
+  padding: 8px 12px 24px;
+}
+
+@media (max-width: 760px) {
+  .grid { gap: 12px; padding: 8px 10px 20px; }
+}
+
+/* Empty state */
+.grid-empty {
+  width: 100%;
+  max-width: 980px;
+  height: 380px;
+  border: 1px dashed rgba(255,255,255,.25);
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  color: #cfd3d7;
+  background: rgba(255,255,255,.03);
+}
+
+/* Tile */
+.tile {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #15161a;
+  box-shadow:
+    0 1px 2px rgba(0,0,0,.5),
+    inset 0 0 0 1px rgba(255,255,255,.06);
+}
+
+.tile-imgWrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.tile-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* ensures SVGs and bitmaps fill square consistently */
+  display: block;
+}
+
+/* Close button */
+.tile-close {
+  position: absolute;
+  top: 8px; right: 8px;
+  z-index: 10;
+  width: 24px; height: 24px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(0,0,0,.55);
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.tile-close:hover { background: rgba(0,0,0,.75); }
+
+/* Buttons */
+.btn {
+  background: #2b2f36;
+  color: #e9eef5;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+.btn:hover { background: #343a43; }
