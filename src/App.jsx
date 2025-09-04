@@ -1,13 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Grid from './components/Grid.jsx'
 import { OVERLAY_MODES } from './constants'
-import { extractAverageAndDominant } from './imageUtils' // same util as before (color extraction)
+import {
+  averageColorFromBitmap,
+  dominantColorsFromBitmap,
+} from './colorUtils'
 import html2canvas from 'html2canvas'
-
-/**
- * App shell: toolbar, grid, and export.
- * Export preview removed; a single button now downloads the JPG.
- */
 
 const DEFAULT_OPACITY = 0.5
 const LS_KEY = 'gridtone-v1-items'
@@ -53,13 +51,11 @@ export default function App() {
     try { localStorage.setItem(LS_KEY, JSON.stringify(skinny)) } catch {}
   }, [items])
 
-  // Handle file selection
   const onAddClick = () => fileInputRef.current?.click()
 
   const onFilesSelected = async (files) => {
     if (!files || !files.length) return
 
-    // Downscale large images to reduce memory and avoid mobile quota issues
     const maxSide = 1600
     const newItems = []
     for (const file of Array.from(files)) {
@@ -68,7 +64,18 @@ export default function App() {
       const img = new Image()
       img.src = down
       await imageLoaded(img)
-      const { avg, dom } = await extractAverageAndDominant(img)
+
+      // Compute colors using your bitmap-based helpers
+      const bitmap = await createImageBitmap(img)
+      let avg = [128,128,128], dom = [[128,128,128],[128,128,128],[128,128,128]]
+      try {
+        avg = averageColorFromBitmap(bitmap)
+        dom = dominantColorsFromBitmap(bitmap, 3)
+      } finally {
+        // Free browser memory asap
+        if (bitmap && bitmap.close) bitmap.close()
+      }
+
       newItems.push({
         id: crypto.randomUUID(),
         img,
@@ -79,22 +86,14 @@ export default function App() {
     setItems(prev => [...prev, ...newItems])
   }
 
-  // Drag & drop on empty state handler
   const onDropFiles = (fileList) => onFilesSelected(fileList)
 
-  // Color overlay label
   const overlayLabel = useMemo(() => {
     if (overlayMode === OVERLAY_MODES.DOT) return 'Dot'
     if (overlayMode === OVERLAY_MODES.HALF) return 'Half'
     return 'Full'
   }, [overlayMode])
 
-  /**
-   * Export the grid as a JPG.
-   * If "Include overlays" is ON, we temporarily turn overlays ON for the capture,
-   * then restore the previous UI setting. We also force two paints so the capture
-   * always sees the correct DOM.
-   */
   const handleExportJPG = async () => {
     const node = exportRootRef.current
     if (!node) return
@@ -106,9 +105,8 @@ export default function App() {
       if (exportIncludeOverlay && !showColor) {
         setShowColor(true)
         restore = true
-        await nextFrame(); await nextFrame() // ensure overlays rendered
+        await nextFrame(); await nextFrame()
       }
-      // Ensure tiles are perfectly square like the visual grid (they already are)
       const canvas = await html2canvas(node, {
         backgroundColor: '#0f0f10',
         useCORS: true,
@@ -242,10 +240,6 @@ function readFileAsDataURL(file) {
   })
 }
 
-/**
- * Downscale a dataURL to fit maxSide while keeping aspect ratio.
- * Returns a new dataURL (JPEG ~0.92).
- */
 async function downscale(dataUrl, maxSide = 1600) {
   const img = new Image()
   img.src = dataUrl
