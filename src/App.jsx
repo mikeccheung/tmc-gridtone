@@ -1,187 +1,213 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { OVERLAY_MODES, OVERLAY_ALPHAS, GRID_COLUMNS } from './constants'
-import { saveTiles, loadTiles } from './state/storage'
-import { useImageImporter } from './hooks/useImageImporter'
-import { exportGrid, exportGridObjectURL, ensureImagesDecoded } from './exportUtils'
-import Modal from './Modal'
-import Grid from './components/Grid'
-import Toolbar from './components/Toolbar'
-import PaletteSidebar from './components/PaletteSidebar'
-import ImageViewerModal from './components/ImageViewerModal'
-import { createPlaceholderTile, sampleColors9 } from './utils/placeholder'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import Grid from './components/Grid.jsx'
+import { OVERLAY_MODES } from './constants'
+import { extractAverageAndDominant } from './imageUtils' // same util as before (color extraction)
+import html2canvas from 'html2canvas'
+
+/**
+ * App shell: toolbar, grid, and export.
+ * Export preview removed; a single button now downloads the JPG.
+ */
+
+const DEFAULT_OPACITY = 0.5
+const LS_KEY = 'gridtone-v1-items'
 
 export default function App() {
-  const [navOpen, setNavOpen] = useState(false)
-  const [showSidebar, setShowSidebar] = useState(false)
-
   const [items, setItems] = useState([])
-  useEffect(() => { (async () => setItems(await loadTiles()))() }, [])
   const [activeId, setActiveId] = useState(null)
 
+  // Color controls
   const [showColor, setShowColor] = useState(true)
-  const [mode, setMode] = useState('average')
-  const [overlayMode, setOverlayMode] = useState(OVERLAY_MODES.DOT)
-  const [overlayAlphaIdx, setOverlayAlphaIdx] = useState(2)
+  const [mode, setMode] = useState('average') // 'average' | 'dominant'
+  const [overlayMode, setOverlayMode] = useState(OVERLAY_MODES.DOT) // DOT | HALF | FULL
+  const [overlayAlpha, setOverlayAlpha] = useState(DEFAULT_OPACITY)
 
-  const [previewOpen, setPreviewOpen] = useState(false)
-  const [previewUrl, setPreviewUrl] = useState(null)
-  const [previewIncludeOverlays, setPreviewIncludeOverlays] = useState(false)
+  // Export UI
+  const [exportIncludeOverlay, setExportIncludeOverlay] = useState(true)
 
-  const [viewerOpen, setViewerOpen] = useState(false)
-  const [viewerIndex, setViewerIndex] = useState(0)
+  // File input ref (hidden)
+  const fileInputRef = useRef(null)
 
-  const { importing, importFiles } = useImageImporter()
-  const inputRef = useRef(null)
+  // A wrapper we capture for export (encapsulates only the grid, not the toolbar).
+  const exportRootRef = useRef(null)
 
-  useEffect(() => { saveTiles(items) }, [items])
-
-  const onFiles = async (files) => {
-    const newTiles = await importFiles(files)
-    if (newTiles.length) setItems(prev => prev.concat(newTiles))
-  }
-  const onDropInput = (e) => { e.preventDefault(); onFiles(e.dataTransfer.files) }
-  const onInputChange = (e) => onFiles(e.target.files)
-
-  const columns = GRID_COLUMNS
-  const overlayAlpha = OVERLAY_ALPHAS[overlayAlphaIdx]
-
-  // Export preview generation — now decodes images first
-  const generatePreview = useCallback(async () => {
-    if (!previewOpen || !items.length) return
-    if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null) }
-
-    await ensureImagesDecoded(items)
-
-    const url = await exportGridObjectURL({
-      tiles: items,
-      columns,
-      includeOverlays: previewIncludeOverlays,
-      showColor, mode, overlayMode,
-      overlayAlpha,
-      tileSize: 256, spacing: 12, background: '#0f0f10',
-    })
-    if (url) setPreviewUrl(url)
-  }, [previewOpen, items, columns, previewIncludeOverlays, showColor, mode, overlayMode, overlayAlpha, previewUrl])
-
-  const openPreview = useCallback(() => { if (items.length) setPreviewOpen(true) }, [items.length])
-  useEffect(() => { generatePreview() }, [generatePreview])
-  const closePreview = useCallback(() => {
-    setPreviewOpen(false)
-    if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null) }
-  }, [previewUrl])
-
-  const downloadExport = useCallback(async () => {
-    if (!items.length) return
-    await ensureImagesDecoded(items)
-    const blob = await exportGrid({
-      tiles: items, columns,
-      includeOverlays: previewIncludeOverlays,
-      showColor, mode, overlayMode, overlayAlpha,
-      tileSize: 512, spacing: 12, background: '#0f0f10',
-    })
-    if (!blob) return
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = 'gridtone_export.jpg'; a.click()
-    URL.revokeObjectURL(url)
-  }, [items, columns, previewIncludeOverlays, showColor, mode, overlayMode, overlayAlpha])
-
-  // Sample 3×3 and Clear Grid
-  const loadSampleGrid = useCallback(async () => {
-    if (items.length) {
-      const ok = window.confirm('Replace current grid with a 3×3 sample? This will discard your current arrangement.')
-      if (!ok) return
-    }
-    const colors = sampleColors9()
-    const tiles = []
-    for (let i = 0; i < 9; i++) {
-      // eslint-disable-next-line no-await-in-loop
-      const t = await createPlaceholderTile({ rgb: colors[i], label: i + 1, size: 900 })
-      const blob = await fetch(t.img.src).then(r => r.blob()).catch(()=>null)
-      tiles.push({ ...t, blob })
-    }
-    setItems(tiles)
-  }, [items.length])
-
-  const clearGrid = useCallback(() => {
-    if (!items.length) return
-    const ok = window.confirm('Remove all images from the grid? This cannot be undone.')
-    if (ok) setItems([])
-  }, [items.length])
-
-  // Viewer wiring (open only if index is valid)
-  const handleTileClick = useCallback((idx) => {
-    if (idx >= 0 && idx < items.length) {
-      setViewerIndex(idx)
-      setViewerOpen(true)
-    }
-  }, [items.length])
-
-  const deleteFromViewer = useCallback((idx) => {
-    setItems((arr) => {
-      const next = arr.slice(0, idx).concat(arr.slice(idx + 1))
-      if (next.length === 0) {
-        setViewerOpen(false)
-      } else if (idx >= next.length) {
-        setViewerIndex(next.length - 1)
+  // Load/save items to localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) setItems(parsed)
       }
-      return next
-    })
+    } catch {}
   }, [])
 
+  useEffect(() => {
+    // Persist lightweight data (omit image element objects)
+    const skinny = items.map(it => ({
+      id: it.id,
+      img: { src: it.img?.src },
+      avg: it.avg,
+      dom: it.dom
+    }))
+    try { localStorage.setItem(LS_KEY, JSON.stringify(skinny)) } catch {}
+  }, [items])
+
+  // Handle file selection
+  const onAddClick = () => fileInputRef.current?.click()
+
+  const onFilesSelected = async (files) => {
+    if (!files || !files.length) return
+
+    // Downscale large images to reduce memory and avoid mobile quota issues
+    const maxSide = 1600
+    const newItems = []
+    for (const file of Array.from(files)) {
+      const src = await readFileAsDataURL(file)
+      const down = await downscale(src, maxSide)
+      const img = new Image()
+      img.src = down
+      await imageLoaded(img)
+      const { avg, dom } = await extractAverageAndDominant(img)
+      newItems.push({
+        id: crypto.randomUUID(),
+        img,
+        avg,
+        dom
+      })
+    }
+    setItems(prev => [...prev, ...newItems])
+  }
+
+  // Drag & drop on empty state handler
+  const onDropFiles = (fileList) => onFilesSelected(fileList)
+
+  // Color overlay label
+  const overlayLabel = useMemo(() => {
+    if (overlayMode === OVERLAY_MODES.DOT) return 'Dot'
+    if (overlayMode === OVERLAY_MODES.HALF) return 'Half'
+    return 'Full'
+  }, [overlayMode])
+
+  /**
+   * Export the grid as a JPG.
+   * If "Include overlays" is ON, we temporarily turn overlays ON for the capture,
+   * then restore the previous UI setting. We also force two paints so the capture
+   * always sees the correct DOM.
+   */
+  const handleExportJPG = async () => {
+    const node = exportRootRef.current
+    if (!node) return
+
+    const prevShow = showColor
+    let restore = false
+
+    try {
+      if (exportIncludeOverlay && !showColor) {
+        setShowColor(true)
+        restore = true
+        await nextFrame(); await nextFrame() // ensure overlays rendered
+      }
+      // Ensure tiles are perfectly square like the visual grid (they already are)
+      const canvas = await html2canvas(node, {
+        backgroundColor: '#0f0f10',
+        useCORS: true,
+        scale: Math.min(2, window.devicePixelRatio || 1.5)
+      })
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.95)
+      downloadBlobURL(dataUrl, 'gridtone.jpg')
+    } catch (e) {
+      console.error('Export failed', e)
+      alert('Export failed. Try again after a fresh reload.')
+    } finally {
+      if (restore) {
+        setShowColor(prevShow)
+        await nextFrame()
+      }
+    }
+  }
+
   return (
-    <>
-      {/* Header */}
-      <header className="site-header">
-        <div className="brand">
-          <div className="logo" aria-hidden="true"></div>
-          <div className="brand-text">
-            <strong>GridTone</strong>
-            <span className="tagline">Plan your feed by feel</span>
-          </div>
+    <div className="page">
+      <header className="topbar">
+        <div className="branding">
+          <a href="/" className="logo">GridTone</a>
+          <span className="tagline">Visualize your grid. Nail the tone.</span>
         </div>
 
-        <nav className={`primary-nav ${navOpen ? 'open' : ''}`} aria-label="Primary" onClick={() => setNavOpen(false)}>
-          <a href="#features">Features</a>
-          <a href="#howto">How it works</a>
-          <a href="#privacy">Privacy</a>
-        </nav>
+        <div className="controls">
+          <div className="row">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={showColor}
+                onChange={(e) => setShowColor(e.target.checked)}
+              />
+              <span>Color Map</span>
+            </label>
 
-        <button className="hamburger" aria-label="Toggle menu" onClick={() => setNavOpen((o) => !o)}>
-          <span /><span /><span />
-        </button>
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value)}
+              aria-label="Color mode"
+            >
+              <option value="average">Average</option>
+              <option value="dominant">Dominant (3)</option>
+            </select>
+
+            <select
+              value={overlayMode}
+              onChange={(e) => setOverlayMode(Number(e.target.value))}
+              aria-label="Overlay style"
+            >
+              <option value={OVERLAY_MODES.DOT}>Dot</option>
+              <option value={OVERLAY_MODES.HALF}>Half</option>
+              <option value={OVERLAY_MODES.FULL}>Full</option>
+            </select>
+
+            <label className="range">
+              <span>Opacity</span>
+              <input
+                type="range"
+                min="0.2"
+                max="0.8"
+                step="0.15"
+                value={overlayAlpha}
+                onChange={(e) => setOverlayAlpha(Number(e.target.value))}
+              />
+            </label>
+          </div>
+
+          <div className="row">
+            <button className="btn" onClick={onAddClick}>Add Images</button>
+
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={exportIncludeOverlay}
+                onChange={(e) => setExportIncludeOverlay(e.target.checked)}
+              />
+              <span>Include overlays</span>
+            </label>
+
+            <button className="btn primary" onClick={handleExportJPG}>
+              Export layout as JPG
+            </button>
+          </div>
+        </div>
       </header>
 
-      {/* Hero */}
-      <section className="hero">
-        <div className="hero-inner">
-          <h1>Visualize your grid. Nail the tone.</h1>
-          <p>Drag, reorder, and color-check your posts with instant overlays and a palette that mirrors your layout. Install as a PWA and plan anywhere.</p>
-          <div className="hero-actions">
-            <label className="btn">
-              <input ref={inputRef} type="file" accept="image/*" multiple onChange={onInputChange} />
-              <span>{importing ? 'Importing…' : 'Add Images'}</span>
-            </label>
-            <a className="btn btn-secondary" href="#features">Explore Features</a>
-          </div>
-        </div>
-      </section>
+      <main>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(e) => onFilesSelected(e.target.files)}
+        />
 
-      {/* App Shell */}
-      <div className="shell" onDragOver={(e) => e.preventDefault()} onDrop={onDropInput}>
-        <div className="page">
-          <Toolbar
-            hasItems={!!items.length}
-            importing={importing}
-            onOpenPreview={openPreview}
-            onLoadSample={loadSampleGrid}
-            onClearGrid={clearGrid}
-            showColor={showColor} setShowColor={setShowColor}
-            mode={mode} setMode={setMode}
-            overlayMode={overlayMode} setOverlayMode={setOverlayMode}
-            overlayAlphaIdx={overlayAlphaIdx} setOverlayAlphaIdx={setOverlayAlphaIdx}
-            showSidebar={showSidebar} setShowSidebar={setShowSidebar}
-          />
-
+        <div ref={exportRootRef} id="export-root">
           <Grid
             items={items}
             setItems={setItems}
@@ -191,75 +217,67 @@ export default function App() {
             mode={mode}
             overlayMode={overlayMode}
             overlayAlpha={overlayAlpha}
-            onTileClick={handleTileClick}
-            onAddClick={() => inputRef.current?.click()}    // for empty-state button
-            onDropFiles={(files)=>onFiles(files)}           // for empty-state drop
+            onTileClick={() => {}}
+            onAddClick={onAddClick}
+            onDropFiles={onDropFiles}
           />
         </div>
+      </main>
 
-        <PaletteSidebar open={showSidebar} items={items} mode={mode} />
-      </div>
-
-      {/* Feature strip */}
-      <section id="features" className="feature-strip">
-        <div className="feature-card">
-          <h3>Drag & Plan</h3>
-          <p>Reorder with a flick. See rows of three, just like your feed. Tiles animate into place for instant feedback.</p>
-        </div>
-        <div className="feature-card">
-          <h3>Color-First</h3>
-          <p>Toggle average tone or the top three dominant hues. Overlays and a synchronized palette reflect every move.</p>
-        </div>
-        <div className="feature-card">
-          <h3>Export & Install</h3>
-          <p>Export your current grid as a high-quality JPG. Install as a PWA for a native-like experience on the go.</p>
-        </div>
-      </section>
-
-      {/* Export Preview Modal */}
-      <Modal open={previewOpen} onClose={closePreview} title="Export Preview">
-        <div className="modal-header">
-          <strong>Export Preview</strong>
-          <button className="modal-close" onClick={closePreview} aria-label="Close">×</button>
-        </div>
-        <div className="modal-controls">
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={previewIncludeOverlays}
-              onChange={(e) => setPreviewIncludeOverlays(e.target.checked)}
-            />
-            <span>Include overlays (use current Color Map/Mode/Opacity)</span>
-          </label>
-          <button className="btn" onClick={downloadExport}>Download JPG</button>
-        </div>
-        <div className="modal-body">
-          {previewUrl ? (
-            <img
-              src={previewUrl}
-              alt="Export preview"
-              style={{ maxWidth: '100%', height: 'auto', display: 'block', margin: '0 auto', borderRadius: 12 }}
-            />
-          ) : (
-            <div>Generating…</div>
-          )}
-        </div>
-      </Modal>
-
-      {/* Viewer */}
-      <ImageViewerModal
-        open={viewerOpen && !!items[viewerIndex]}   // only open if valid
-        onClose={()=>setViewerOpen(false)}
-        items={items}
-        index={viewerIndex}
-        setIndex={setViewerIndex}
-        onDeleteCurrent={deleteFromViewer}
-        showColor={showColor} setShowColor={setShowColor}
-        mode={mode} setMode={setMode}
-        overlayMode={overlayMode} setOverlayMode={setOverlayMode}
-        overlayAlphaIdx={overlayAlphaIdx} setOverlayAlphaIdx={setOverlayAlphaIdx}
-        overlayAlphas={OVERLAY_ALPHAS}
-      />
-    </>
+      <footer className="footer">
+        <p>Images stay on your device. No uploads. Install as a PWA to plan offline.</p>
+      </footer>
+    </div>
   )
+}
+
+/* ---------- helpers ---------- */
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader()
+    fr.onload = () => resolve(fr.result)
+    fr.onerror = reject
+    fr.readAsDataURL(file)
+  })
+}
+
+/**
+ * Downscale a dataURL to fit maxSide while keeping aspect ratio.
+ * Returns a new dataURL (JPEG ~0.92).
+ */
+async function downscale(dataUrl, maxSide = 1600) {
+  const img = new Image()
+  img.src = dataUrl
+  await imageLoaded(img)
+  const { width, height } = img
+  const scale = Math.min(1, maxSide / Math.max(width, height))
+  if (scale === 1) return dataUrl
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(width * scale)
+  canvas.height = Math.round(height * scale)
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', 0.92)
+}
+
+function imageLoaded(img) {
+  return new Promise((res, rej) => {
+    if (img.complete && img.naturalWidth) return res()
+    img.onload = () => res()
+    img.onerror = rej
+  })
+}
+
+function nextFrame() {
+  return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+}
+
+function downloadBlobURL(dataUrl, filename) {
+  const a = document.createElement('a')
+  a.href = dataUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
 }

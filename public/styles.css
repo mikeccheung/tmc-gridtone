@@ -363,3 +363,16 @@ img { display: block; max-width: 100%; height: auto; }
 .grid { touch-action: pan-y; }                 /* allow vertical scroll when not dragging */
 .tile, .tile * { user-select: none; }          /* prevent text/image selection while pressing */
 .tile img { -webkit-user-drag: none; }         /* stop native image drag ghost */
+
+.topbar { padding: 12px 16px; display: grid; gap: 8px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.branding { display: flex; align-items: baseline; gap: 8px; }
+.branding .logo { font-weight: 700; text-decoration: none; color: #fff; }
+.branding .tagline { opacity: .7; font-size: 0.9rem; }
+
+.controls { display: grid; gap: 8px; }
+.controls .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.check { display: inline-flex; align-items: center; gap: 6px; user-select: none; }
+.range { display: inline-flex; align-items: center; gap: 6px; }
+.btn.primary { background: #2d7aff; color: #fff; }
+#export-root { margin: 12px auto; max-width: 980px; }
+.footer { padding: 16px; opacity: .7; text-align: center; }
